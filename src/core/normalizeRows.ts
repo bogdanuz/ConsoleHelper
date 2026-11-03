@@ -24,35 +24,31 @@ function pad(rows: string[][]): string[][] {
 }
 
 /**
- * If any first cell has name\\nid lines, pull id into its own column for ALL rows
- * so numbers stay under the same column index (do not shove metrics sideways only on some rows).
+ * name\\nid in one cell → put id into column 1 only if that cell is empty.
+ * Never insert a column (that would shove CAPEX/OPEX under the wrong headers).
  */
 function applySplitMultilineNames(rows: string[][]): { rows: string[][]; splitName: number } {
-  const parsed = rows.map((row) => {
+  let splitName = 0;
+  const out = rows.map((row) => {
     const first = row[0] ?? '';
     const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-    if (parts.length < 2) return { split: false as const, row: [...row] };
-    const [name, ...restParts] = parts;
-    return {
-      split: true as const,
-      row: [name ?? '', restParts.join(' '), ...row.slice(1)],
-    };
-  });
-  if (!parsed.some((p) => p.split)) return { rows, splitName: 0 };
+    if (parts.length < 2) return [...row];
+    const name = parts[0] ?? '';
+    const idPart = parts.slice(1).join(' ');
+    // Only treat as name+id when the extra line looks like an id
+    if (!looksLikeId(idPart)) return [...row];
 
-  let splitName = 0;
-  const out = parsed.map((p) => {
-    if (p.split) {
+    const second = String(row[1] ?? '').trim();
+    if (!second) {
       splitName++;
-      return p.row;
+      const next = [...row];
+      next[0] = name;
+      while (next.length < 2) next.push('');
+      next[1] = idPart;
+      return next;
     }
-    const r = p.row;
-    // Already has an id-like 2nd cell — keep columns as-is.
-    if (r.length >= 2 && looksLikeId(String(r[1] ?? ''))) return r;
-    // Id-only first cell — no title to split.
-    if (looksLikeId(String(r[0] ?? '')) && !looksLikeTitle(String(r[0] ?? ''))) return r;
-    // Insert empty id column so metrics align with split rows.
-    return [r[0] ?? '', '', ...r.slice(1)];
+    // Column 1 already has data (budget etc.) — keep id with the name, no shift
+    return row;
   });
   return { rows: out, splitName };
 }
@@ -61,14 +57,23 @@ function extractDept(row: string[]): string[] {
   const first = row[0] ?? '';
   const m = first.match(DEPT_RE);
   if (!m) return row;
+  const second = String(row[1] ?? '').trim();
+  // Only add dept column when col1 is free — never shove metrics
+  if (second) {
+    const next = [...row];
+    next[0] = first.replace(DEPT_RE, '').trim();
+    return next;
+  }
   const next = [...row];
   next[0] = first.replace(DEPT_RE, '').trim();
-  next.splice(1, 0, m[1] ?? '');
+  while (next.length < 2) next.push('');
+  next[1] = m[1] ?? '';
   return next;
 }
 
 /**
  * Turn visually broken grids into logical rows.
+ * Rule: never insert columns in the middle — that misaligns header labels vs numbers.
  */
 export function normalizeRows(
   input: string[][],
@@ -105,21 +110,19 @@ export function normalizeRows(
         !(prev[1] && looksLikeId(prev[1]));
 
       if (continuation && prev) {
-        const name = prev[0] ?? '';
-        const rest = prev.slice(1);
-        const alreadyHasId = !!(rest[0] && looksLikeId(rest[0]));
-        if (alreadyHasId) {
-          prev[0] = `${name}\n${idToken}`.trim();
+        const second = String(prev[1] ?? '').trim();
+        if (!second) {
+          while (prev.length < 2) prev.push('');
+          prev[1] = idToken;
         } else {
-          prev.length = 0;
-          prev.push(name, idToken, ...rest);
+          // Metrics already in col1 — attach id to the name, do not shift columns
+          prev[0] = `${prev[0] ?? ''}\n${idToken}`.trim();
         }
         for (let i = 0; i < row.length; i++) {
           const v = row[i]?.trim() ?? '';
           if (!v || v === idToken) continue;
-          const target = i === 0 ? 2 : i + 1;
-          while (prev.length <= target) prev.push('');
-          prev[target] = (prev[target] ? `${prev[target]} ` : '') + v;
+          while (prev.length <= i) prev.push('');
+          if (!String(prev[i] ?? '').trim()) prev[i] = v;
         }
         merged++;
       } else {

@@ -57,21 +57,22 @@
     let merged = 0;
     let rows = input.map((r) => [...r]);
     if (splitMultilineName) {
-      const parsed = rows.map((row) => {
+      rows = rows.map((row) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-        if (parts.length < 2) return { split: false, row: [...row] };
-        return { split: true, row: [parts[0], parts.slice(1).join(' '), ...row.slice(1)] };
+        if (parts.length < 2) return row;
+        const idPart = parts.slice(1).join(' ');
+        if (!looksLikeId(idPart)) return row;
+        const second = String(row[1] || '').trim();
+        if (!second) {
+          const next = [...row];
+          next[0] = parts[0];
+          while (next.length < 2) next.push('');
+          next[1] = idPart;
+          return next;
+        }
+        return row;
       });
-      if (parsed.some((p) => p.split)) {
-        rows = parsed.map((p) => {
-          if (p.split) return p.row;
-          const r = p.row;
-          if (r.length >= 2 && looksLikeId(String(r[1] || ''))) return r;
-          if (looksLikeId(String(r[0] || '')) && !looksLikeTitle(String(r[0] || ''))) return r;
-          return [r[0] || '', '', ...r.slice(1)];
-        });
-      }
     }
     if (mergeIdRows) {
       const out = [];
@@ -89,20 +90,18 @@
           !!idToken &&
           !(prev[1] && looksLikeId(prev[1]));
         if (continuation && prev) {
-          const name = prev[0] || '';
-          const rest = prev.slice(1);
-          const alreadyHasId = !!(rest[0] && looksLikeId(rest[0]));
-          if (alreadyHasId) prev[0] = (name + '\n' + idToken).trim();
-          else {
-            prev.length = 0;
-            prev.push(name, idToken, ...rest);
+          const second = String(prev[1] || '').trim();
+          if (!second) {
+            while (prev.length < 2) prev.push('');
+            prev[1] = idToken;
+          } else {
+            prev[0] = (String(prev[0] || '') + '\n' + idToken).trim();
           }
           for (let i = 0; i < row.length; i++) {
             const v = String(row[i] || '').trim();
             if (!v || v === idToken) continue;
-            const target = i === 0 ? 2 : i + 1;
-            while (prev.length <= target) prev.push('');
-            prev[target] = (prev[target] ? prev[target] + ' ' : '') + v;
+            while (prev.length <= i) prev.push('');
+            if (!String(prev[i] || '').trim()) prev[i] = v;
           }
           merged++;
         } else out.push([...row]);
@@ -120,6 +119,112 @@
     return { rows, meta: { merged } };
   };
 
+  const isNumTok = (t) => {
+    const s = String(t || '').trim();
+    if (!s) return false;
+    if (parseRuNumber(s) !== null) return true;
+    return /%$/.test(s);
+  };
+  const pairLabelValues = (frags, mergePx) => {
+    const empty = { rows: [], use: false, paired: 0 };
+    if (!frags || frags.length < 4) return empty;
+    const hs = frags.map((f) => f.h).sort((a, b) => a - b);
+    const tol = Math.max(4, hs[Math.floor(hs.length / 2)] * 0.65);
+    const sorted = [...frags].sort((a, b) => a.y - b.y || a.x1 - b.x1);
+    const lines = [];
+    sorted.forEach((f) => {
+      const last = lines[lines.length - 1];
+      if (last && Math.abs(f.y - last.y) <= tol) {
+        last.items.push(f);
+        last.y = (last.y * (last.items.length - 1) + f.y) / last.items.length;
+      } else lines.push({ y: f.y, items: [f] });
+    });
+    const phrases = [];
+    lines.forEach((line) => {
+      const items = [...line.items].sort((a, b) => a.x1 - b.x1);
+      const row = [];
+      items.forEach((it) => {
+        const prev = row[row.length - 1];
+        const gap = prev ? it.x1 - prev.x2 : 999;
+        const join =
+          prev &&
+          gap <= (mergePx || 10) &&
+          gap >= -2 &&
+          ((isNumTok(prev.t) && isNumTok(it.t)) || (!isNumTok(prev.t) && !isNumTok(it.t)));
+        if (prev && join) {
+          prev.t += (gap > 1 ? ' ' : '') + it.t;
+          prev.x2 = Math.max(prev.x2, it.x2);
+        } else row.push({ t: it.t, x1: it.x1, x2: it.x2, y: it.y, h: it.h });
+      });
+      row.forEach((p) => {
+        p.num = isNumTok(p.t);
+        phrases.push(p);
+      });
+    });
+    let mixed = 0;
+    lines.forEach((line) => {
+      const ps = phrases.filter((p) => Math.abs(p.y - line.y) <= tol);
+      const hasText = ps.some((p) => !p.num && /[A-Za-zА-Яа-я]/.test(p.t));
+      const hasNum = ps.some((p) => p.num);
+      if (hasText && hasNum && ps.length >= 3) mixed++;
+    });
+    if (mixed >= 2 && mixed >= lines.length * 0.35) return empty;
+    const numbers = phrases.filter((p) => p.num).sort((a, b) => a.y - b.y || a.x1 - b.x1);
+    if (numbers.length < 3) return empty;
+    const labels = phrases.filter((p) => !p.num && /[A-Za-zА-Яа-я]/.test(p.t));
+    const ov = (a, b) => {
+      const inter = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+      if (inter <= 0) return 0;
+      const minW = Math.min(a.x2 - a.x1, b.x2 - b.x1);
+      return minW <= 1 ? 0 : inter / minW;
+    };
+    const rows = [];
+    let paired = 0;
+    numbers.forEach((num) => {
+      let best = null;
+      let bestScore = -1e9;
+      labels.forEach((lab) => {
+        if (lab.y >= num.y - 1) return;
+        const dy = num.y - lab.y;
+        if (dy > 72) return;
+        const ratio = ov(lab, num);
+        if (ratio < 0.4) return;
+        const score = ratio * 120 - dy;
+        if (score > bestScore) {
+          bestScore = score;
+          best = lab;
+        }
+      });
+      if (!best) return;
+      paired++;
+      rows.push([best.t, num.t]);
+    });
+    const use = paired >= 3 && paired / numbers.length >= 0.55;
+    return { rows: use ? rows : [], use, paired };
+  };
+
+  const pinnedDelta = (el, scrollY) => {
+    let n = el;
+    while (n && n !== document.documentElement) {
+      const pos = getComputedStyle(n).position;
+      if (pos === 'fixed') return null;
+      if (pos === 'sticky') {
+        let y = 0;
+        let cur = n;
+        let guard = 0;
+        while (cur && guard++ < 25) {
+          y += cur.offsetTop || 0;
+          const next = cur.offsetParent;
+          if (!next || next === cur) break;
+          cur = next;
+        }
+        return n.getBoundingClientRect().top + scrollY - y;
+      }
+      n = n.parentElement;
+    }
+    return 0;
+  };
+
   const collect = (region) => {
     const out = [], sx = scrollX, sy = scrollY, range = document.createRange();
     const hit = (cx, cy) => !region || (cx >= region.x1 && cx <= region.x2 && cy >= region.y1 && cy <= region.y2);
@@ -131,15 +236,19 @@
     while ((n = w.nextNode())) {
       const p = n.parentElement;
       if (p.checkVisibility && !p.checkVisibility({ checkVisibilityCSS: true })) continue;
+      const shift = pinnedDelta(p, sy);
+      if (shift == null) continue;
       range.selectNodeContents(n);
       const bb = range.getBoundingClientRect();
       if (!bb.width || !bb.height) continue;
+      const top = bb.top + sy - shift;
+      const bottom = bb.bottom + sy - shift;
       if (
         region &&
         (bb.right + sx < region.x1 ||
           bb.left + sx > region.x2 ||
-          bb.bottom + sy < region.y1 ||
-          bb.top + sy > region.y2)
+          bottom < region.y1 ||
+          top > region.y2)
       )
         continue;
       const s = n.nodeValue, re = /\S+/g;
@@ -149,8 +258,10 @@
         range.setEnd(n, m.index + m[0].length);
         const r = range.getBoundingClientRect();
         if (!r.width || !r.height) continue;
-        const cx = (r.left + r.right) / 2 + sx, cy = (r.top + r.bottom) / 2 + sy;
-        if (hit(cx, cy)) out.push({ t: m[0], x1: r.left + sx, x2: r.right + sx, y: cy, h: r.height });
+        const cx = (r.left + r.right) / 2 + sx;
+        const cy = (r.top + r.bottom) / 2 + sy - shift;
+        if (hit(cx, cy))
+          out.push({ t: m[0], x1: r.left + sx, x2: r.right + sx, y: cy, h: r.height });
       }
     }
     document
@@ -162,7 +273,10 @@
         const v = i.tagName === 'SELECT' ? i.selectedOptions[0]?.text || '' : i.value;
         const b = i.getBoundingClientRect();
         if (!v || !b.width || !b.height) return;
-        const cx = (b.left + b.right) / 2 + sx, cy = (b.top + b.bottom) / 2 + sy;
+        const shift = pinnedDelta(i, sy);
+        if (shift == null) return;
+        const cx = (b.left + b.right) / 2 + sx;
+        const cy = (b.top + b.bottom) / 2 + sy - shift;
         if (hit(cx, cy))
           out.push({ t: v.trim(), x1: b.left + sx, x2: b.right + sx, y: cy, h: Math.min(b.height, 20) });
       });
@@ -336,13 +450,16 @@
     rebuild();
   });
   smartBtn.textContent = 'Умная таблица: ВКЛ';
-  smartBtn.title = 'Схлопывает название + код (ID) в одну строку';
+  smartBtn.title =
+    'Склеивает код к названию и собирает карточки «подпись над числом» в две колонки. Обычную таблицу не ломает.';
   const view = el('div', 'flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0');
 
   const rebuild = async () => {
-    rawGrid = build(frags, merge, gap);
-    grid = smart ? normalizeRows(rawGrid).rows : rawGrid;
-    status.textContent = `Слов: ${frags.length}, строк: ${grid.length}, столбцов: ${colsN(grid)}${smart ? ' · умная' : ' · как есть'}`;
+    const paired = smart ? pairLabelValues(frags, Math.max(merge, 8)) : { use: false, rows: [] };
+    rawGrid = paired.use ? paired.rows : build(frags, merge, gap);
+    grid = smart && !paired.use ? normalizeRows(rawGrid).rows : rawGrid;
+    const mode = paired.use ? ' · карточки' : smart ? ' · умная' : ' · как есть';
+    status.textContent = `Слов: ${frags.length}, строк: ${grid.length}, столбцов: ${colsN(grid)}${mode}`;
     try {
       const Studio = await ensureStudio();
       studioApi?.destroy?.();
@@ -377,12 +494,20 @@
   modal.append(bar, view);
   root.appendChild(modal);
 
+  let scrolling = false;
   const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
   const onToolEsc = (e) => {
     if (!isEscKey(e)) return;
     if (root.querySelector('[style*="crosshair"]')) return; // region pick has own Esc
     e.preventDefault();
     e.stopPropagation();
+    // #region agent log
+    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'post-fix',hypothesisId:'H1',location:'text-to-table.js:onToolEsc',message:'esc while tool open',data:{modal:modal.style.display,scrolling},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (scrolling) {
+      scrollStop = true;
+      return;
+    }
     if (modal.style.display === 'flex') {
       modal.style.display = 'none';
       studioApi?.destroy?.();
@@ -469,6 +594,7 @@
     if (e.key === 'Escape') scrollStop = true;
   };
   const autoScrollThenRun = async () => {
+    scrolling = true;
     scrollStop = false;
     const startY = window.scrollY;
     const maxSteps = 40;
@@ -492,6 +618,7 @@
       setScrollNote(scrollStop ? 'Остановлено' : 'Снимаю…');
       if (!scrollStop) run(null);
     } finally {
+      scrolling = false;
       removeEventListener('keydown', onScrollEsc, true);
       window.scrollTo(0, startY);
     }
@@ -528,6 +655,6 @@
       root.remove();
       delete window.__tx;
     },
-    _test: { normalizeRows, looksLikeId },
+    _test: { normalizeRows, looksLikeId, pairLabelValues, pinnedDelta },
   };
 })();

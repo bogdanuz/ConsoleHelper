@@ -47,12 +47,21 @@
     status.style.color = kind === 'err' ? '#f07178' : kind === 'ok' ? '#3dd68c' : '#9aa0a6';
   };
 
+  let scrolling = false;
   const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
   const onToolEsc = (e) => {
     if (!isEscKey(e)) return;
     if (root.querySelector('[style*="crosshair"]')) return;
     e.preventDefault();
     e.stopPropagation();
+    // #region agent log
+    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'post-fix',hypothesisId:'H2',location:'screenshot.js:onToolEsc',message:'esc on screenshot',data:{scrolling},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (scrolling) {
+      scrollStop = true;
+      setStatus('Останавливаю прокрутку…');
+      return;
+    }
     scrollStop = true;
     destroy();
   };
@@ -315,6 +324,7 @@
     }
   };
   const autoScrollThenCapture = async () => {
+    scrolling = true;
     scrollStop = false;
     const startY = window.scrollY;
     const maxSteps = 40;
@@ -338,6 +348,7 @@
       if (!scrollStop) await captureFullPage();
       else setStatus('Прокрутка остановлена', 'ok');
     } finally {
+      scrolling = false;
       removeEventListener('keydown', onScrollEsc, true);
       window.scrollTo(0, startY);
     }

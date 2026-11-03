@@ -90,24 +90,23 @@
     let splitName = 0;
     let rows = input.map((r) => [...r]);
     if (splitMultilineName) {
-      const parsed = rows.map((row) => {
+      rows = rows.map((row) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-        if (parts.length < 2) return { split: false, row: [...row] };
-        return { split: true, row: [parts[0], parts.slice(1).join(' '), ...row.slice(1)] };
+        if (parts.length < 2) return row;
+        const idPart = parts.slice(1).join(' ');
+        if (!looksLikeId(idPart)) return row;
+        const second = String(row[1] || '').trim();
+        if (!second) {
+          splitName++;
+          const next = [...row];
+          next[0] = parts[0];
+          while (next.length < 2) next.push('');
+          next[1] = idPart;
+          return next;
+        }
+        return row;
       });
-      if (parsed.some((p) => p.split)) {
-        rows = parsed.map((p) => {
-          if (p.split) {
-            splitName++;
-            return p.row;
-          }
-          const r = p.row;
-          if (r.length >= 2 && looksLikeId(String(r[1] || ''))) return r;
-          if (looksLikeId(String(r[0] || '')) && !looksLikeTitle(String(r[0] || ''))) return r;
-          return [r[0] || '', '', ...r.slice(1)];
-        });
-      }
     }
     if (mergeIdRows) {
       const out = [];
@@ -126,20 +125,18 @@
           !!idToken &&
           !(prev[1] && looksLikeId(prev[1]));
         if (continuation && prev) {
-          const name = prev[0] || '';
-          const rest = prev.slice(1);
-          const alreadyHasId = !!(rest[0] && looksLikeId(rest[0]));
-          if (alreadyHasId) prev[0] = (name + '\n' + idToken).trim();
-          else {
-            prev.length = 0;
-            prev.push(name, idToken, ...rest);
+          const second = String(prev[1] || '').trim();
+          if (!second) {
+            while (prev.length < 2) prev.push('');
+            prev[1] = idToken;
+          } else {
+            prev[0] = (String(prev[0] || '') + '\n' + idToken).trim();
           }
           for (let i = 0; i < row.length; i++) {
             const v = String(row[i] || '').trim();
             if (!v || v === idToken) continue;
-            const target = i === 0 ? 2 : i + 1;
-            while (prev.length <= target) prev.push('');
-            prev[target] = (prev[target] ? prev[target] + ' ' : '') + v;
+            while (prev.length <= i) prev.push('');
+            if (!String(prev[i] || '').trim()) prev[i] = v;
           }
           merged++;
         } else out.push([...row]);
@@ -338,7 +335,8 @@
     void openStudio(studioRaw, studioTitle);
   });
   smartBtn.textContent = 'Умная таблица: ВКЛ';
-  smartBtn.title = 'Схлопывает название + код (ID) в одну строку';
+  smartBtn.title =
+    'Склеивает лишние строки с кодом к названию. Числа и подписи колонок не сдвигает.';
 
   let studioRaw = [];
   let studioTitle = 'Таблица';

@@ -392,7 +392,7 @@
       head.appendChild(
         el('th', 'border:1px solid #2a3038;padding:4px 6px;background:#1e232b;width:36px', ''),
       );
-      const cols = allRows[0] ? allRows[0].length : 0;
+      const cols = Math.max(0, ...allRows.map((r) => r.length));
       for (let c = 0; c < cols; c++) {
         head.appendChild(
           el(

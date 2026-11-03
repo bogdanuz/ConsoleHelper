@@ -8,3 +8,5 @@ export * from './parseClipboard';
 export * from './compactNumbers';
 export * from './studioStats';
 export * from './exportXlsx';
+export * from './pairLabelValues';
+export * from './pinnedDelta';
