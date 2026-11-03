@@ -38,8 +38,8 @@ describe('text-to-table embedded normalize', () => {
 
   it('ships smart toggle label in source', () => {
     const code = readFileSync(join(root, 'public/tools/text-to-table.js'), 'utf8');
-    expect(code).toContain('Умная таблица: ВКЛ');
-    expect(code).toContain('smart = true');
+    expect(code).toContain('Как на странице');
+    expect(code).toContain('applyCaptureModes');
     expect(code).toContain("pos === 'sticky'");
     expect(code).toContain("pos === 'fixed'");
   });

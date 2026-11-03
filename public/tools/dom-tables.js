@@ -1,11 +1,16 @@
 ﻿(() => {
+  window.__tx?.destroy?.();
+  window.__cards?.destroy?.();
+  window.__ch_shot?.destroy?.();
   window.__tp?.destroy?.();
 
   const MAXC = 60;
   const MINROWS = 3;
   const BAD = 'script,style,noscript,svg,template';
 
-  let smart = true;
+  let labelValues = false;
+  let codeColumn = false;
+  let dirty = false;
   let studioApi = null;
   let studioRows = [];
 
@@ -89,28 +94,26 @@
     let merged = 0;
     let splitName = 0;
     let rows = input.map((r) => [...r]);
+    let pending = rows.map(() => '');
     if (splitMultilineName) {
-      rows = rows.map((row) => {
+      rows = rows.map((row, i) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
         if (parts.length < 2) return row;
         const idPart = parts.slice(1).join(' ');
         if (!looksLikeId(idPart)) return row;
-        const second = String(row[1] || '').trim();
-        if (!second) {
-          splitName++;
-          const next = [...row];
-          next[0] = parts[0];
-          while (next.length < 2) next.push('');
-          next[1] = idPart;
-          return next;
-        }
-        return row;
+        const next = [...row];
+        next[0] = parts[0];
+        splitName++;
+        pending[i] = idPart;
+        return next;
       });
     }
     if (mergeIdRows) {
       const out = [];
-      for (const row of rows) {
+      const outPending = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         const cells = row.map((c) => String(c || '').trim());
         const first = cells[0] || '';
         const idToken =
@@ -123,25 +126,31 @@
           looksLikeTitle(prev[0] || '') &&
           nonEmpty <= 2 &&
           !!idToken &&
-          !(prev[1] && looksLikeId(prev[1]));
+          !(prev[1] && looksLikeId(prev[1])) &&
+          !outPending[out.length - 1];
         if (continuation && prev) {
-          const second = String(prev[1] || '').trim();
-          if (!second) {
-            while (prev.length < 2) prev.push('');
-            prev[1] = idToken;
-          } else {
-            prev[0] = (String(prev[0] || '') + '\n' + idToken).trim();
-          }
-          for (let i = 0; i < row.length; i++) {
-            const v = String(row[i] || '').trim();
+          outPending[out.length - 1] = idToken;
+          for (let c = 0; c < row.length; c++) {
+            const v = String(row[c] || '').trim();
             if (!v || v === idToken) continue;
-            while (prev.length <= i) prev.push('');
-            if (!String(prev[i] || '').trim()) prev[i] = v;
+            while (prev.length <= c) prev.push('');
+            if (!String(prev[c] || '').trim()) prev[c] = v;
           }
           merged++;
-        } else out.push([...row]);
+        } else {
+          out.push([...row]);
+          outPending.push(pending[i] || '');
+        }
       }
       rows = out;
+      pending = outPending;
+    }
+    if (pending.some((id) => id)) {
+      rows = rows.map((row, i) => {
+        const next = [...row];
+        next.splice(1, 0, pending[i] || '');
+        return next;
+      });
     }
     rows = pad(rows.filter((r) => r.some((c) => String(c).trim())));
     return { rows, meta: { merged, splitName, inputRows: input.length, outputRows: rows.length } };
@@ -217,7 +226,8 @@
     return window.__CH_Studio;
   };
 
-  const currentRows = () => (studioApi ? studioApi.getRows() : studioRows);
+  const currentRows = () =>
+    studioApi?.getExportRows?.() || (studioApi ? studioApi.getRows() : studioRows);
 
   const downloadExcel = async (rows, name) => {
     if (window.__CH_Studio?.downloadXlsx) {
@@ -286,31 +296,50 @@
     info,
     el('button', B + ';background:#1a7f37', '⬇ Все в Excel', () => {
       if (!items.length) return;
-      let html = '<html><head><meta charset="utf-8"></head><body>';
-      items.forEach((it, i) => {
+      const sheets = items.map((it, i) => {
         const raw = it.get();
-        const rows = smart ? normalizeRows(raw).rows : raw;
-        html +=
-          `<p><b>Таблица ${i + 1}</b></p><table border="1">` +
-          rows
-            .map(
-              (r) =>
-                '<tr>' +
-                r.map((c) => `<td style="mso-number-format:'\\@'">${esc(c)}</td>`).join('') +
-                '</tr>',
-            )
-            .join('') +
-          '</table><br>';
+        const rows = codeColumn ? normalizeRows(raw).rows : raw;
+        return { name: 'Таблица ' + (i + 1), rows };
       });
-      html += '</body></html>';
-      const a = document.createElement('a');
-      const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
-      a.href = url;
-      a.download = 'export_all_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const fallback = () => {
+        if (!confirm('Настоящий Excel не загрузился. Скачать запасной старый файл?')) return;
+        let html = '<html><head><meta charset="utf-8"></head><body>';
+        sheets.forEach((sheet) => {
+          html +=
+            `<p><b>${esc(sheet.name)}</b></p><table border="1">` +
+            sheet.rows
+              .map(
+                (r) =>
+                  '<tr>' +
+                  r.map((c) => `<td>${esc(c)}</td>`).join('') +
+                  '</tr>',
+              )
+              .join('') +
+            '</table><br>';
+        });
+        html += '</body></html>';
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+        a.href = url;
+        a.download = 'export_all_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      };
+      void (async () => {
+        try {
+          await ensureStudio();
+        } catch (_) {}
+        if (window.__CH_Studio?.downloadXlsxBook) {
+          const ok = await window.__CH_Studio.downloadXlsxBook(sheets, toolsBase);
+          if (ok) {
+            info.textContent = 'Скачан Excel .xlsx';
+            return;
+          }
+        }
+        fallback();
+      })();
     }),
     el('button', B, '👁', () => {
       hidden = !hidden;
@@ -329,32 +358,60 @@
   const bar = el('div', 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px');
   const status = el('span', 'font-weight:600;margin-right:8px');
   const view = el('div', 'flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0');
-  const smartBtn = el('button', B + ';background:#3d8bff', '', () => {
-    smart = !smart;
-    smartBtn.textContent = smart ? 'Умная таблица: ВКЛ' : 'Как есть';
-    void openStudio(studioRaw, studioTitle);
-  });
-  smartBtn.textContent = 'Умная таблица: ВКЛ';
-  smartBtn.title =
-    'Склеивает лишние строки с кодом к названию. Числа и подписи колонок не сдвигает.';
+  const paintModes = () => {
+    const raw = !labelValues && !codeColumn;
+    asIsBtn.style.background = raw ? '#0b5cad' : '#333';
+    codeBtn.style.background = codeColumn ? '#0b5cad' : '#333';
+    labelBtn.style.background = labelValues ? '#0b5cad' : '#333';
+  };
+  const retune = (fn) => {
+    if (dirty && !confirm('Собрать заново? Правки пропадут.')) return;
+    dirty = false;
+    fn();
+    if (studioRaw.length) void openStudio(studioRaw, studioTitle, true);
+  };
+  const asIsBtn = el('button', B, 'Как на странице', () =>
+    retune(() => {
+      labelValues = false;
+      codeColumn = false;
+    }),
+  );
+  const codeBtn = el('button', B, 'Код в столбец', () =>
+    retune(() => {
+      codeColumn = !codeColumn;
+    }),
+  );
+  const labelBtn = el('button', B, 'Подпись и число', () =>
+    retune(() => {
+      labelValues = !labelValues;
+    }),
+  );
+  paintModes();
 
   let studioRaw = [];
   let studioTitle = 'Таблица';
 
-  const openStudio = async (raw, title) => {
-    studioRaw = raw.map((r) => [...r]);
-    studioTitle = title || 'Таблица';
-    studioRows = smart ? normalizeRows(studioRaw).rows : pad(studioRaw);
-    status.textContent = `${studioTitle}: строк ${studioRows.length}${smart ? ' · умная' : ' · как есть'}`;
+  const openStudio = async (raw, title, keepRaw) => {
+    if (!keepRaw) {
+      studioRaw = raw.map((r) => [...r]);
+      dirty = false;
+    }
+    studioTitle = title || studioTitle || 'Таблица';
+    let note = '';
+    studioRows = pad(studioRaw);
+    if (labelValues) note = 'не похоже на подписи над числами';
+    if (codeColumn) studioRows = normalizeRows(studioRaw).rows;
+    paintModes();
+    status.textContent = `${studioTitle}: строк ${studioRows.length}${note ? ' · ' + note : ''}`;
     modal.style.display = 'flex';
     try {
       const Studio = await ensureStudio();
       studioApi?.destroy?.();
       studioApi = Studio.mount(view, {
         rows: studioRows,
-        onChange: (next) => {
-          studioRows = next;
-          status.textContent = `${studioTitle}: строк ${studioRows.length} · правки вручную`;
+        onChange: () => {
+          dirty = true;
+          status.textContent = `${studioTitle}: правки вручную`;
         },
       });
     } catch (err) {
@@ -364,10 +421,12 @@
 
   bar.append(
     status,
-    smartBtn,
+    asIsBtn,
+    codeBtn,
+    labelBtn,
     el('button', B + ';background:#1a7f37', 'Excel', () => void downloadExcel(currentRows())),
     el('button', B + ';background:#0b5cad', 'CSV', downloadCsv),
-    el('button', B + ';background:#0b5cad', 'Копировать TSV', copyTSV),
+    el('button', B + ';background:#0b5cad', 'Копировать в Excel (TSV)', copyTSV),
     el('button', B, 'Закрыть', () => {
       modal.style.display = 'none';
       studioApi?.destroy?.();

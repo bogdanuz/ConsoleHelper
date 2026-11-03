@@ -23,34 +23,41 @@ function pad(rows: string[][]): string[][] {
   });
 }
 
+/** New column at index 1 for every row, so headers and numbers move together. */
+function insertIdColumn(rows: string[][], ids: string[]): string[][] {
+  return rows.map((row, i) => {
+    const next = [...row];
+    next.splice(1, 0, ids[i] ?? '');
+    return next;
+  });
+}
+
 /**
- * name\\nid in one cell → put id into column 1 only if that cell is empty.
- * Never insert a column (that would shove CAPEX/OPEX under the wrong headers).
+ * name\\nid in one cell → remember the id.
+ * A later pass always inserts one new column for every row.
  */
-function applySplitMultilineNames(rows: string[][]): { rows: string[][]; splitName: number } {
+function applySplitMultilineNames(rows: string[][]): {
+  rows: string[][];
+  pending: string[];
+  splitName: number;
+} {
   let splitName = 0;
-  const out = rows.map((row) => {
+  const pending = rows.map(() => '');
+  const out = rows.map((row, i) => {
     const first = row[0] ?? '';
     const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
     if (parts.length < 2) return [...row];
     const name = parts[0] ?? '';
     const idPart = parts.slice(1).join(' ');
-    // Only treat as name+id when the extra line looks like an id
     if (!looksLikeId(idPart)) return [...row];
 
-    const second = String(row[1] ?? '').trim();
-    if (!second) {
-      splitName++;
-      const next = [...row];
-      next[0] = name;
-      while (next.length < 2) next.push('');
-      next[1] = idPart;
-      return next;
-    }
-    // Column 1 already has data (budget etc.) — keep id with the name, no shift
-    return row;
+    const next = [...row];
+    next[0] = name;
+    splitName++;
+    pending[i] = idPart;
+    return next;
   });
-  return { rows: out, splitName };
+  return { rows: out, pending, splitName };
 }
 
 function extractDept(row: string[]): string[] {
@@ -73,7 +80,7 @@ function extractDept(row: string[]): string[] {
 
 /**
  * Turn visually broken grids into logical rows.
- * Rule: never insert columns in the middle — that misaligns header labels vs numbers.
+ * An id that does not fit beside the title becomes a new column for every row.
  */
 export function normalizeRows(
   input: string[][],
@@ -90,16 +97,20 @@ export function normalizeRows(
   let merged = 0;
   let splitName = 0;
   let rows = input.map((r) => [...r]);
+  let pending = rows.map(() => '');
 
   if (splitMultilineName) {
     const applied = applySplitMultilineNames(rows);
     rows = applied.rows;
+    pending = applied.pending;
     splitName = applied.splitName;
   }
 
   if (mergeIdRows) {
     const out: string[][] = [];
-    for (const row of rows) {
+    const outPending: string[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!;
       const idToken = idTokenFromRow(row);
       const prev = out[out.length - 1];
       const continuation =
@@ -107,29 +118,29 @@ export function normalizeRows(
         looksLikeTitle(prev[0] ?? '') &&
         nonEmptyCount(row) <= 2 &&
         !!idToken &&
-        !(prev[1] && looksLikeId(prev[1]));
+        !(prev[1] && looksLikeId(prev[1])) &&
+        !outPending[out.length - 1];
 
       if (continuation && prev) {
-        const second = String(prev[1] ?? '').trim();
-        if (!second) {
-          while (prev.length < 2) prev.push('');
-          prev[1] = idToken;
-        } else {
-          // Metrics already in col1 — attach id to the name, do not shift columns
-          prev[0] = `${prev[0] ?? ''}\n${idToken}`.trim();
-        }
-        for (let i = 0; i < row.length; i++) {
-          const v = row[i]?.trim() ?? '';
+        outPending[out.length - 1] = idToken;
+        for (let c = 0; c < row.length; c++) {
+          const v = row[c]?.trim() ?? '';
           if (!v || v === idToken) continue;
-          while (prev.length <= i) prev.push('');
-          if (!String(prev[i] ?? '').trim()) prev[i] = v;
+          while (prev.length <= c) prev.push('');
+          if (!String(prev[c] ?? '').trim()) prev[c] = v;
         }
         merged++;
       } else {
         out.push([...row]);
+        outPending.push(pending[i] ?? '');
       }
     }
     rows = out;
+    pending = outPending;
+  }
+
+  if (pending.some((id) => id)) {
+    rows = insertIdColumn(rows, pending);
   }
 
   if (doDept) {

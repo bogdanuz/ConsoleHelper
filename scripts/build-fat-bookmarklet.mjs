@@ -19,9 +19,7 @@ const INCLUDE = new Set([
   'cards-to-table.js',
 ]);
 
-const screenshotStub = `(() => {
-  alert('Скриншот в полной закладке недоступен. Скопируй обычную закладку с сайта ConsoleHelper.');
-})();`;
+const screenshotStub = `(() => {})();`;
 
 function stripToolsPrefix(file) {
   return String(file).replace(/^tools\//, '');
@@ -64,7 +62,9 @@ const launcher = readFileSync(join(toolsDir, 'launcher.js'), 'utf8');
 const PAGES_TOOLS_BASE =
   process.env.CH_TOOLS_BASE || 'https://bogdanuz.github.io/ConsoleHelper/tools/';
 
+const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const payload =
+  `window.__CH_VERSION__=${JSON.stringify(pkg.version || '')};` +
   `window.__CH_BASE__=${JSON.stringify(PAGES_TOOLS_BASE)};` +
   `window.__CH_BUNDLE__=${JSON.stringify({ tools, sources })};` +
   launcher;

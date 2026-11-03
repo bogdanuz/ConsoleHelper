@@ -1,7 +1,10 @@
 ﻿(() => {
+  window.__tp?.destroy?.();
+  window.__cards?.destroy?.();
+  window.__ch_shot?.destroy?.();
   window.__tx?.destroy?.();
   const BAD = 'script,style,noscript,svg,template,head,[data-tx]';
-  let merge = 6, gap = 14, frags = [], grid = [], rawGrid = [], smart = true;
+  let merge = 6, gap = 14, frags = [], grid = [], rawGrid = [], labelValues = false, codeColumn = false, dirty = false;
   let studioApi = null;
 
   const toolsBase =
@@ -56,27 +59,25 @@
     const splitMultilineName = opts.splitMultilineName !== false;
     let merged = 0;
     let rows = input.map((r) => [...r]);
+    let pending = rows.map(() => '');
     if (splitMultilineName) {
-      rows = rows.map((row) => {
+      rows = rows.map((row, i) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
         if (parts.length < 2) return row;
         const idPart = parts.slice(1).join(' ');
         if (!looksLikeId(idPart)) return row;
-        const second = String(row[1] || '').trim();
-        if (!second) {
-          const next = [...row];
-          next[0] = parts[0];
-          while (next.length < 2) next.push('');
-          next[1] = idPart;
-          return next;
-        }
-        return row;
+        const next = [...row];
+        next[0] = parts[0];
+        pending[i] = idPart;
+        return next;
       });
     }
     if (mergeIdRows) {
       const out = [];
-      for (const row of rows) {
+      const outPending = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         const cells = row.map((c) => String(c || '').trim());
         const first = cells[0] || '';
         const idToken =
@@ -88,25 +89,31 @@
           looksLikeTitle(prev[0] || '') &&
           nonEmpty <= 2 &&
           !!idToken &&
-          !(prev[1] && looksLikeId(prev[1]));
+          !(prev[1] && looksLikeId(prev[1])) &&
+          !outPending[out.length - 1];
         if (continuation && prev) {
-          const second = String(prev[1] || '').trim();
-          if (!second) {
-            while (prev.length < 2) prev.push('');
-            prev[1] = idToken;
-          } else {
-            prev[0] = (String(prev[0] || '') + '\n' + idToken).trim();
-          }
-          for (let i = 0; i < row.length; i++) {
-            const v = String(row[i] || '').trim();
+          outPending[out.length - 1] = idToken;
+          for (let c = 0; c < row.length; c++) {
+            const v = String(row[c] || '').trim();
             if (!v || v === idToken) continue;
-            while (prev.length <= i) prev.push('');
-            if (!String(prev[i] || '').trim()) prev[i] = v;
+            while (prev.length <= c) prev.push('');
+            if (!String(prev[c] || '').trim()) prev[c] = v;
           }
           merged++;
-        } else out.push([...row]);
+        } else {
+          out.push([...row]);
+          outPending.push(pending[i] || '');
+        }
       }
       rows = out;
+      pending = outPending;
+    }
+    if (pending.some((id) => id)) {
+      rows = rows.map((row, i) => {
+        const next = [...row];
+        next.splice(1, 0, pending[i] || '');
+        return next;
+      });
     }
     const w = Math.max(0, ...rows.map((r) => r.length));
     rows = rows
@@ -201,6 +208,20 @@
     });
     const use = paired >= 3 && paired / numbers.length >= 0.55;
     return { rows: use ? rows : [], use, paired };
+  };
+
+  const applyCaptureModes = (rows, fragments, labels, code, mergePx) => {
+    let note = '';
+    let out = rows.map((r) => [...r]);
+    if (labels) {
+      if (fragments && fragments.length) {
+        const paired = pairLabelValues(fragments, mergePx || 10);
+        if (paired.use) out = paired.rows;
+        else note = 'не похоже на подписи над числами';
+      } else note = 'не похоже на подписи над числами';
+    }
+    if (code) out = normalizeRows(out).rows;
+    return { rows: out, note };
   };
 
   const pinnedDelta = (el, scrollY) => {
@@ -365,7 +386,8 @@
     return window.__CH_Studio;
   };
 
-  const currentRows = () => (studioApi ? studioApi.getRows() : grid);
+  const currentRows = () =>
+    studioApi?.getExportRows?.() || (studioApi ? studioApi.getRows() : grid);
 
   const downloadExcel = async () => {
     const rows = currentRows();
@@ -437,37 +459,69 @@
     return i;
   };
   const mIn = num(merge, (v) => {
-    merge = v;
-    rebuild();
+    askRebuild(() => {
+      merge = v;
+    });
   });
   const gIn = num(gap, (v) => {
-    gap = v;
-    rebuild();
+    askRebuild(() => {
+      gap = v;
+    });
   });
-  const smartBtn = el('button', B + ';background:#3d8bff', '', () => {
-    smart = !smart;
-    smartBtn.textContent = smart ? 'Умная таблица: ВКЛ' : 'Как есть';
-    rebuild();
-  });
-  smartBtn.textContent = 'Умная таблица: ВКЛ';
-  smartBtn.title =
-    'Склеивает код к названию и собирает карточки «подпись над числом» в две колонки. Обычную таблицу не ломает.';
+  const tune = el('div', 'display:none;gap:6px;align-items:center;flex-wrap:wrap', '');
+  tune.append(el('span', '', 'Склейка, px:'), mIn, el('span', '', 'Зазор, px:'), gIn);
+  const modeBtn = (label, on) => {
+    const b = el('button', B + ';background:#333', label, on);
+    return b;
+  };
+  const paintModes = () => {
+    const raw = !labelValues && !codeColumn;
+    asIsBtn.style.background = raw ? '#0b5cad' : '#333';
+    codeBtn.style.background = codeColumn ? '#0b5cad' : '#333';
+    labelBtn.style.background = labelValues ? '#0b5cad' : '#333';
+  };
+  const askRebuild = (fn) => {
+    if (dirty && !confirm('Собрать заново? Правки пропадут.')) return;
+    dirty = false;
+    fn();
+    void rebuild();
+  };
+  const asIsBtn = modeBtn('Как на странице', () =>
+    askRebuild(() => {
+      labelValues = false;
+      codeColumn = false;
+    }),
+  );
+  const codeBtn = modeBtn('Код в столбец', () =>
+    askRebuild(() => {
+      codeColumn = !codeColumn;
+    }),
+  );
+  const labelBtn = modeBtn('Подпись и число', () =>
+    askRebuild(() => {
+      labelValues = !labelValues;
+    }),
+  );
+  asIsBtn.title = 'Ничего не менять после съёма';
+  codeBtn.title = 'Новый столбец с кодом на всю таблицу, если код нашёлся';
+  labelBtn.title = 'Только если подписи стоят над числами';
   const view = el('div', 'flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0');
 
   const rebuild = async () => {
-    const paired = smart ? pairLabelValues(frags, Math.max(merge, 8)) : { use: false, rows: [] };
-    rawGrid = paired.use ? paired.rows : build(frags, merge, gap);
-    grid = smart && !paired.use ? normalizeRows(rawGrid).rows : rawGrid;
-    const mode = paired.use ? ' · карточки' : smart ? ' · умная' : ' · как есть';
-    status.textContent = `Слов: ${frags.length}, строк: ${grid.length}, столбцов: ${colsN(grid)}${mode}`;
+    paintModes();
+    const base = build(frags, merge, gap);
+    const applied = applyCaptureModes(base, frags, labelValues, codeColumn, Math.max(merge, 8));
+    rawGrid = base;
+    grid = applied.rows;
+    status.textContent = `Слов: ${frags.length}, строк: ${grid.length}, столбцов: ${colsN(grid)}${applied.note ? ' · ' + applied.note : ''}`;
     try {
       const Studio = await ensureStudio();
       studioApi?.destroy?.();
       studioApi = Studio.mount(view, {
         rows: grid,
-        onChange: (next) => {
-          grid = next;
-          status.textContent = `Строк: ${grid.length}, столбцов: ${colsN(grid)} · правки вручную`;
+        onChange: () => {
+          dirty = true;
+          status.textContent = `Строк: ${studioApi?.getRows?.().length || grid.length} · правки вручную`;
         },
       });
     } catch (err) {
@@ -475,16 +529,13 @@
     }
   };
 
-  bar.append(
-    status,
-    el('span', '', 'Склейка, px:'),
-    mIn,
-    el('span', '', 'Зазор, px:'),
-    gIn,
-    smartBtn,
+  bar.append(status, asIsBtn, codeBtn, labelBtn, tune,
     el('button', B + ';background:#1a7f37', 'Excel', downloadExcel),
     el('button', B + ';background:#0b5cad', 'CSV', downloadCsv),
-    el('button', B + ';background:#0b5cad', 'Копировать TSV', copyTSV),
+    el('button', B + ';background:#0b5cad', 'Копировать в Excel (TSV)', copyTSV),
+    el('button', B, 'Точнее', () => {
+      tune.style.display = tune.style.display === 'flex' ? 'none' : 'flex';
+    }),
     el('button', B, 'Закрыть', () => {
       modal.style.display = 'none';
       studioApi?.destroy?.();
@@ -492,6 +543,34 @@
     }),
   );
   modal.append(bar, view);
+  const dragFrom = (handle, win) => {
+    let on = false;
+    let sx = 0;
+    let sy = 0;
+    let ox = 0;
+    let oy = 0;
+    handle.style.cursor = 'move';
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button,input,a')) return;
+      on = true;
+      const r = win.getBoundingClientRect();
+      sx = e.clientX;
+      sy = e.clientY;
+      ox = r.left;
+      oy = r.top;
+      win.style.left = ox + 'px';
+      win.style.top = oy + 'px';
+    });
+    addEventListener('mousemove', (e) => {
+      if (!on) return;
+      win.style.left = ox + e.clientX - sx + 'px';
+      win.style.top = oy + e.clientY - sy + 'px';
+    });
+    addEventListener('mouseup', () => {
+      on = false;
+    });
+  };
+  dragFrom(bar, modal);
   root.appendChild(modal);
 
   let scrolling = false;
@@ -582,6 +661,7 @@
     };
   };
 
+  let scrollPace = 'normal';
   let scrollStop = false;
   const scrollNote = el('div', 'font-size:11px;color:#9aa0a6;min-height:1.2em', '');
   const setScrollNote = (t) => {
@@ -594,7 +674,9 @@
     scrolling = true;
     scrollStop = false;
     const startY = window.scrollY;
-    const maxSteps = 40;
+    const pace = scrollPace === 'short' ? { steps: 12, wait: 280 } : scrollPace === 'long' ? { steps: 120, wait: 350 } : { steps: 40, wait: 450 };
+    const maxSteps = pace.steps;
+    if (panel._chHold) panel._chHold(true);
     let lastH = 0;
     let stable = 0;
     addEventListener('keydown', onScrollEsc, true);
@@ -603,7 +685,7 @@
         if (scrollStop) break;
         setScrollNote('Прокрутка ' + (i + 1) + '/' + maxSteps + '… Esc — стоп');
         window.scrollTo(0, document.documentElement.scrollHeight);
-        await new Promise((r) => setTimeout(r, 450));
+        await new Promise((r) => setTimeout(r, pace.wait));
         const h = document.documentElement.scrollHeight;
         if (h <= lastH + 2) {
           stable++;
@@ -616,6 +698,7 @@
       if (!scrollStop) run(null);
     } finally {
       scrolling = false;
+      if (panel._chHold) panel._chHold(false);
       removeEventListener('keydown', onScrollEsc, true);
       window.scrollTo(0, startY);
     }
@@ -633,6 +716,15 @@
     el('button', B + ';background:#0b5cad', 'Список подгружается при прокрутке', () =>
       void autoScrollThenRun(),
     ),
+    el('button', B, 'Короче', () => {
+      scrollPace = 'short';
+    }),
+    el('button', B, 'Обычно', () => {
+      scrollPace = 'normal';
+    }),
+    el('button', B, 'До конца', () => {
+      scrollPace = 'long';
+    }),
     tip('Список растёт, когда крутишь вниз.'),
     tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери прокрутку; если ничего нового — «уже вся загружена».'),
     tip('Esc — закрыть редактор, ещё раз Esc — закрыть инструмент.'),
@@ -643,6 +735,25 @@
     }),
   );
   root.appendChild(panel);
+  panel.style.transition = 'transform .2s ease';
+  panel.style.transform = 'translateX(calc(100% - 36px))';
+  let dockTimer = 0;
+  const dockShow = () => {
+    clearTimeout(dockTimer);
+    panel.style.transform = 'translateX(0)';
+  };
+  panel.addEventListener('mouseenter', dockShow);
+  panel.addEventListener('mouseleave', () => {
+    clearTimeout(dockTimer);
+    dockTimer = setTimeout(() => {
+      if (panel.dataset.chHold === '1' || modal.style.display === 'flex') return;
+      panel.style.transform = 'translateX(calc(100% - 36px))';
+    }, 2000);
+  });
+  panel._chHold = (on) => {
+    panel.dataset.chHold = on ? '1' : '';
+    if (on) dockShow();
+  };
 
   window.__tx = {
     destroy() {
@@ -652,6 +763,6 @@
       root.remove();
       delete window.__tx;
     },
-    _test: { normalizeRows, looksLikeId, pairLabelValues, pinnedDelta },
+    _test: { normalizeRows, looksLikeId, pairLabelValues, pinnedDelta, applyCaptureModes },
   };
 })();

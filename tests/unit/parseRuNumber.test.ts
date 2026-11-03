@@ -18,6 +18,11 @@ describe('parseRuNumber', () => {
     expect(parseRuNumber('')).toBeNull();
   });
 
+  it('keeps percents out of plain numbers', () => {
+    expect(parseRuNumber('74%')).toBeNull();
+    expect(parseRuNumber('10 000')).toBe(10000);
+  });
+
   it('detects zeroish cells', () => {
     expect(isZeroish('0')).toBe(true);
     expect(isZeroish('—')).toBe(true);

@@ -1,4 +1,7 @@
 (() => {
+  window.__tx?.destroy?.();
+  window.__tp?.destroy?.();
+  window.__ch_shot?.destroy?.();
   window.__cards?.destroy?.();
 
   const toolsBase =
@@ -29,6 +32,7 @@
       .sort()
       .join('.');
 
+  let lastCards = [];
   const leafTexts = (card) => {
     const leaves = [...card.querySelectorAll('*')].filter(
       (e) => !e.children.length && txt(e) && !e.closest(BAD),
@@ -73,7 +77,11 @@
       });
     });
     const best = Object.values(groups).sort((a, b) => b.score - a.score)[0];
-    if (!best) return [];
+    if (!best) {
+      lastCards = [];
+      return [];
+    }
+    lastCards = best.list;
     return best.list.map((card) => {
       const cells = leafTexts(card);
       while (cells.length < best.cols) cells.push('');
@@ -123,8 +131,20 @@
   const run = async (region) => {
     try {
       const rows = findCards(region);
+      lastCards.forEach((n) => {
+        n.dataset.chOldOutline = n.style.outline || '';
+        n.style.outline = '3px solid #3d8bff';
+      });
       if (!rows.length) {
         alert('Карточки не найдены. Выдели область плотнее или открой страницу с плитками.');
+        return;
+      }
+      const open = confirm('Найдено карточек: ' + rows.length + '. Открыть?');
+      lastCards.forEach((n) => {
+        n.style.outline = n.dataset.chOldOutline || '';
+      });
+      if (!open) {
+        alert('Если это не те блоки, выдели область плотнее.');
         return;
       }
       await openRows(rows);

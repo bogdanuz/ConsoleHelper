@@ -1,9 +1,14 @@
+/** "74%" stays a percent, not the bare number 74. */
+export function isPercentText(raw: string): boolean {
+  return /^\s*-?[\d\s]+(?:[.,]\d+)?\s*%\s*$/.test(String(raw || ''));
+}
+
 /**
  * Parse Russian-formatted money/number: "12 763,50" / "—"/"" → number | null
  */
 export function parseRuNumber(raw: string): number | null {
   const s = raw.trim();
-  if (!s || s === '—' || s === '-' || s === '–') return null;
+  if (!s || s === '—' || s === '-' || s === '–' || isPercentText(s)) return null;
   const cleaned = s
     .replace(/\s/g, '')
     .replace(/₽/g, '')

@@ -27,7 +27,7 @@ describe('table-studio paste', () => {
     expect(Studio.parseClipboard({ text })).toEqual(parseClipboard({ text }));
   });
 
-  it('mount shows paste button', () => {
+  it('mount has undo and does not offer paste-replace', () => {
     const code = readFileSync(join(root, 'public/tools/table-studio.js'), 'utf8');
     (0, eval)(code);
     const Studio = (window as unknown as { __CH_Studio: { mount: Function } }).__CH_Studio;
@@ -36,8 +36,8 @@ describe('table-studio paste', () => {
       destroy: () => void;
       pasteFromClipboard: () => Promise<boolean>;
     };
-    expect(box.textContent).toContain('Вставить');
-    expect(api.pasteFromClipboard).toBeTypeOf('function');
+    expect(box.textContent).toContain('Шаг назад');
+    expect(box.textContent).not.toContain('Вставить');
     api.destroy();
   });
 

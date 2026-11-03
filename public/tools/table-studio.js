@@ -90,10 +90,11 @@
 
   const looksLikeHtml = (s) => /<table\b/i.test(s) || /<tr\b/i.test(s);
 
+  const isPercentText = (raw) => /^\s*-?[\d\s]+(?:[.,]\d+)?\s*%\s*$/.test(String(raw || ''));
   const parseRuNumber = (raw) => {
     const s = String(raw || '').trim();
-    if (!s || s === '—' || s === '-' || s === '–') return null;
-    const cleaned = s.replace(/\s/g, '').replace(/₽/g, '').replace(/%/g, '').replace(/,/g, '.');
+    if (!s || s === '—' || s === '-' || s === '–' || isPercentText(s)) return null;
+    const cleaned = s.replace(/\s/g, '').replace(/₽/g, '').replace(/,/g, '.');
     if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
     const n = Number(cleaned);
     return Number.isFinite(n) ? n : null;
@@ -195,6 +196,7 @@
     if (!XLSX) return false;
     const aoa = rows.map((row) =>
       row.map((cell) => {
+        if (isPercentText(cell)) return String(cell);
         const n = parseRuNumber(String(cell));
         return n === null ? String(cell) : n;
       }),
@@ -217,6 +219,39 @@
     return true;
   };
 
+  const downloadXlsxBook = async (sheets, toolsBase) => {
+    const XLSX = await loadXlsx(toolsBase);
+    if (!XLSX) return false;
+    const wb = XLSX.utils.book_new();
+    (sheets || []).forEach((sheet, i) => {
+      const rows = sheet.rows || [];
+      const aoa = rows.map((row) =>
+        row.map((cell) => {
+          if (isPercentText(cell)) return String(cell);
+          const n = parseRuNumber(String(cell));
+          return n === null ? String(cell) : n;
+        }),
+      );
+      const ws = XLSX.utils.aoa_to_sheet(aoa.length ? aoa : [['']]);
+      const name = String(sheet.name || 'Лист ' + (i + 1)).slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(
+      new Blob([buf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+    a.href = url;
+    a.download = 'export_all_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  };
+
   function mount(container, opts) {
     let allRows = pad(clone(opts.rows || []));
     let filterQuery = '';
@@ -227,6 +262,28 @@
     const enablePaste = opts.enablePaste !== false;
     const onPasteInfo = opts.onPasteInfo || (() => {});
     const toolsBase = opts.toolsBase || window.__CH_BASE__;
+    const hiddenCols = new Set();
+    let fileVisibleOnly = true;
+    let showLimit = maxRows;
+    let headerOn = false;
+    let headerRow = null;
+    let dragAnchor = null;
+    let dragged = false;
+    const history = [];
+    const snapshot = () => ({
+      rows: clone(allRows),
+      headerOn,
+      headerRow: headerRow ? [...headerRow] : null,
+      hidden: [...hiddenCols],
+      selected: [...selected],
+      showLimit,
+      fileVisibleOnly,
+    });
+    const pushHist = () => {
+      history.push(snapshot());
+      if (history.length > 50) history.shift();
+    };
+    const colCount = () => Math.max(0, ...allRows.map((r) => r.length), headerRow ? headerRow.length : 0);
 
     const wrap = el(
       'div',
@@ -265,22 +322,26 @@
       let count = 0;
       let sum = 0;
       let numericCount = 0;
+      const visibleIdx = new Set(getView().map((x) => x.allIndex));
       for (const key of selected) {
-        count++;
         const [rs, cs] = key.split(':');
-        const n = parseRuNumber(String(allRows[Number(rs)]?.[Number(cs)] ?? ''));
+        const r = Number(rs);
+        const c = Number(cs);
+        if (!visibleIdx.has(r) || hiddenCols.has(c)) continue;
+        count++;
+        const n = parseRuNumber(String(allRows[r]?.[c] ?? ''));
         if (n === null) continue;
         sum += n;
         numericCount++;
       }
       const viewLen = getView().length;
-      const trunc =
-        viewLen > maxRows ? ` · на экране ${maxRows} из ${viewLen} (фильтр/правки по всем)` : '';
+      const shown = Math.min(showLimit, viewLen);
+      const trunc = viewLen > shown ? ` · Показаны ${shown} из ${viewLen}` : '';
       if (!count) {
         sumLine.style.color = '#9aa0a6';
         sumLine.textContent = trunc
-          ? `Выбрано: 0 · кликни по числам${trunc}`
-          : 'Выбрано: 0 · кликни по числам — появится сумма';
+          ? `Выбрано: 0 · кликни по числам или по номеру столбца${trunc}`
+          : 'Выбрано: 0 · кликни по числам или по номеру столбца — появится сумма';
         return;
       }
       const sumText = numericCount
@@ -366,20 +427,94 @@
       }),
     );
 
+    const visibleOnlyBtn = toolBtn(
+      'В файл только то, что видно',
+      'Фильтр и спрятанные столбцы',
+      '#0b5cad',
+      () => {
+        fileVisibleOnly = !fileVisibleOnly;
+        visibleOnlyBtn.textContent = fileVisibleOnly
+          ? 'В файл только то, что видно'
+          : 'В файл вся таблица';
+        visibleOnlyBtn.style.background = fileVisibleOnly ? '#0b5cad' : '#333';
+      },
+    );
     tools.append(
-      toolBtn('Числа без пробелов', '«10 000» → «10000»', '#0b5cad', () => {
-        const { rows: next, changed } = compactNumericGrid(allRows);
-        applyAll(next, {
-          ok: true,
-          message: changed ? `Убраны пробелы в ${changed} ячейках` : 'Нечего менять',
-        });
+      visibleOnlyBtn,
+      toolBtn('Числа без пробелов', 'Только в выделенных клетках', '#0b5cad', () => {
+        if (!selected.size) {
+          sumLine.style.color = '#e6c07b';
+          sumLine.textContent =
+            'Зажми левую кнопку и протяни по клеткам. Пробелы уберутся только там.';
+          return;
+        }
+        pushHist();
+        let changed = 0;
+        for (const key of selected) {
+          const [rs, cs] = key.split(':');
+          const r = Number(rs);
+          const c = Number(cs);
+          const cur = allRows[r]?.[c];
+          if (cur == null) continue;
+          const next = compactNumericCell(cur);
+          if (next !== cur) {
+            allRows[r][c] = next;
+            changed++;
+          }
+        }
+        sumLine.textContent = changed
+          ? `Убраны пробелы в ${changed} выделенных ячейках`
+          : 'В выделенном нечего менять';
+        emit();
+        render();
+      }),
+      toolBtn('Шаг назад', 'До 50 шагов', '#333', () => {
+        const prev = history.pop();
+        if (!prev) {
+          sumLine.textContent = 'Шагов назад больше нет';
+          return;
+        }
+        allRows = prev.rows;
+        headerOn = prev.headerOn;
+        headerRow = prev.headerRow;
+        hiddenCols.clear();
+        prev.hidden.forEach((c) => hiddenCols.add(c));
+        selected.clear();
+        prev.selected.forEach((k) => selected.add(k));
+        showLimit = prev.showLimit;
+        fileVisibleOnly = prev.fileVisibleOnly;
+        visibleOnlyBtn.textContent = fileVisibleOnly
+          ? 'В файл только то, что видно'
+          : 'В файл вся таблица';
+        visibleOnlyBtn.style.background = fileVisibleOnly ? '#0b5cad' : '#333';
+        headerBtn.textContent = headerOn ? 'Заголовки: ВКЛ' : 'Первая строка — заголовки';
+        emit();
+        render();
+      }),
+      toolBtn('Показать ещё', 'Следующие 500 строк', '#333', () => {
+        showLimit += maxRows;
+        render();
       }),
     );
-    if (enablePaste) {
-      tools.append(
-        toolBtn('Вставить', 'Из буфера', '#3d8bff', () => void ingestClipboard()),
-      );
-    }
+    const headerBtn = toolBtn('Первая строка — заголовки', 'Не включает само', '#333', () => {
+      if (!headerOn) {
+        if (!allRows.length) return;
+        pushHist();
+        headerRow = [...(allRows[0] || [])];
+        allRows = allRows.slice(1);
+        headerOn = true;
+      } else {
+        pushHist();
+        allRows = [headerRow || [], ...allRows];
+        headerOn = false;
+        headerRow = null;
+      }
+      headerBtn.textContent = headerOn ? 'Заголовки: ВКЛ' : 'Первая строка — заголовки';
+      headerBtn.style.background = headerOn ? '#0b5cad' : '#333';
+      emit();
+      render();
+    });
+    tools.append(headerBtn);
 
     const render = () => {
       allRows = pad(allRows);
@@ -392,19 +527,69 @@
       head.appendChild(
         el('th', 'border:1px solid #2a3038;padding:4px 6px;background:#1e232b;width:36px', ''),
       );
-      const cols = Math.max(0, ...allRows.map((r) => r.length));
+      const cols = colCount();
       for (let c = 0; c < cols; c++) {
-        head.appendChild(
-          el(
-            'th',
-            'border:1px solid #2a3038;padding:4px 6px;background:#1e232b;color:#9aa0a6;font-weight:600',
-            String(c + 1),
-          ),
+        if (hiddenCols.has(c)) continue;
+        const th = el(
+          'th',
+          'border:1px solid #2a3038;padding:4px 6px;background:#1e232b;color:#9aa0a6;font-weight:600;cursor:pointer',
+          headerOn && headerRow ? headerRow[c] || String(c + 1) : String(c + 1),
         );
+        th.title = 'Клик — выделить столбец';
+        th.onclick = () => {
+          const view = getView().slice(0, showLimit);
+          const keys = view.map((x) => x.allIndex + ':' + c);
+          const allOn = keys.every((k) => selected.has(k));
+          keys.forEach((k) => (allOn ? selected.delete(k) : selected.add(k)));
+          updateSumLine();
+          render();
+        };
+        const hideB = el(
+          'button',
+          'margin-left:4px;border:0;background:#333;color:#fff;border-radius:4px;cursor:pointer;font:10px system-ui',
+          'Спрятать',
+          (e) => {
+            e.stopPropagation();
+            pushHist();
+            hiddenCols.add(c);
+            render();
+          },
+        );
+        const delB = el(
+          'button',
+          'margin-left:2px;border:0;background:#5a2a2a;color:#fff;border-radius:4px;cursor:pointer;font:10px system-ui',
+          'Удалить',
+          (e) => {
+            e.stopPropagation();
+            pushHist();
+            allRows = allRows.map((row) => row.filter((_, i) => i !== c));
+            if (headerRow) headerRow = headerRow.filter((_, i) => i !== c);
+            const nextHidden = new Set();
+            hiddenCols.forEach((h) => {
+              if (h < c) nextHidden.add(h);
+              else if (h > c) nextHidden.add(h - 1);
+            });
+            hiddenCols.clear();
+            nextHidden.forEach((h) => hiddenCols.add(h));
+            const nextSel = [];
+            selected.forEach((k) => {
+              const [rs, cs] = k.split(':');
+              const ci = Number(cs);
+              if (ci === c) return;
+              nextSel.push(rs + ':' + (ci > c ? ci - 1 : ci));
+            });
+            selected.clear();
+            nextSel.forEach((k) => selected.add(k));
+            emit();
+            render();
+          },
+        );
+        th.append(hideB, delB);
+        head.appendChild(th);
       }
       table.appendChild(head);
 
-      view.slice(0, maxRows).forEach(({ row, allIndex }) => {
+      view.slice(0, showLimit).forEach(({ row, allIndex }) => {
         const tr = el('tr');
         const del = el(
           'button',
@@ -412,6 +597,7 @@
           '✕',
           (e) => {
             e.stopPropagation();
+            pushHist();
             const beforeSel = [...selected];
             allRows = allRows.filter((_, i) => i !== allIndex);
             const remapped = [];
@@ -434,6 +620,7 @@
         tr.appendChild(tdDel);
 
         row.forEach((cell, ci) => {
+          if (hiddenCols.has(ci)) return;
           const key = allIndex + ':' + ci;
           const isSel = selected.has(key);
           const td = el(
@@ -442,10 +629,42 @@
               (isSel ? 'background:#1a3a5c;' : ''),
           );
           td.spellcheck = false;
+          td.dataset.k = key;
           td.textContent = cell;
           const isEditing = () => td.getAttribute('contenteditable') === 'true';
+          td.addEventListener('mousedown', (ev) => {
+            if (ev.button !== 0 || isEditing()) return;
+            dragAnchor = { r: allIndex, c: ci };
+            dragged = false;
+          });
+          td.addEventListener('mouseenter', (ev) => {
+            if (!dragAnchor || (ev.buttons & 1) === 0) return;
+            const r1 = Math.min(dragAnchor.r, allIndex);
+            const r2 = Math.max(dragAnchor.r, allIndex);
+            const c1 = Math.min(dragAnchor.c, ci);
+            const c2 = Math.max(dragAnchor.c, ci);
+            if (r1 !== r2 || c1 !== c2) dragged = true;
+            for (let r = r1; r <= r2; r++) {
+              for (let c = c1; c <= c2; c++) {
+                if (!hiddenCols.has(c)) selected.add(r + ':' + c);
+              }
+            }
+            updateSumLine();
+            scroller.querySelectorAll('td[data-k]').forEach((cell) => {
+              const on = selected.has(cell.dataset.k || '');
+              cell.style.background = on ? '#1a3a5c' : '';
+            });
+            // #region agent log
+            fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'post-fix',hypothesisId:'H1',location:'table-studio.js:drag',message:'drag select without rerender',data:{anchor:dragAnchor,r:allIndex,c:ci,selected:selected.size,cellConnected:td.isConnected},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          });
           td.addEventListener('click', (ev) => {
             if (isEditing()) return;
+            if (dragged) {
+              dragged = false;
+              ev.preventDefault();
+              return;
+            }
             ev.preventDefault();
             if (selected.has(key)) {
               selected.delete(key);
@@ -467,6 +686,7 @@
             td.removeAttribute('contenteditable');
             const v = td.textContent || '';
             if (allRows[allIndex][ci] === v) return;
+            pushHist();
             allRows[allIndex][ci] = v;
             emit();
           });
@@ -484,33 +704,48 @@
       updateSumLine();
     };
 
-    const onPaste = (ev) => {
-      if (!enablePaste || !wrap.contains(ev.target)) return;
-      const cd = ev.clipboardData;
-      if (!cd) return;
-      const html = cd.getData('text/html') || '';
-      const text = cd.getData('text/plain') || '';
-      const looksTable =
-        /<table\b/i.test(html) ||
-        (text.includes('\t') && text.includes('\n')) ||
-        (/[;,]/.test(text) && text.split(/\r?\n/).length > 1);
-      if (!looksTable) return;
-      ev.preventDefault();
-      void ingestClipboard(ev);
+    const stopDrag = () => {
+      dragAnchor = null;
     };
-    document.addEventListener('paste', onPaste, true);
+    document.addEventListener('mouseup', stopDrag, true);
+
+    const exportRows = () => {
+      const visible = fileVisibleOnly ? new Set(getView().map((x) => x.allIndex)) : null;
+      const body = allRows
+        .filter((_, i) => !visible || visible.has(i))
+        .map((row) => row.filter((_, c) => !hiddenCols.has(c)));
+      if (headerOn && headerRow) {
+        const head = headerRow.filter((_, c) => !hiddenCols.has(c));
+        return [head, ...body];
+      }
+      return body;
+    };
 
     wrap.replaceChildren(hint, filterRow, tools, sumLine, scroller);
     container.replaceChildren(wrap);
     render();
+    if (allRows.length > 1) {
+      const head = allRows[0] || [];
+      const next = allRows[1] || [];
+      const filled = head.filter((c) => String(c).trim()).length;
+      const numbersInHead = head.filter((c) => parseRuNumber(c) !== null).length;
+      const textish = head.filter((c) => String(c).trim() && parseRuNumber(c) === null).length;
+      const nums = next.filter((c) => parseRuNumber(c) !== null).length;
+      if (!numbersInHead && filled && textish >= Math.ceil(filled * 0.5) && nums >= 1) {
+        sumLine.textContent =
+          (sumLine.textContent ? sumLine.textContent + ' · ' : '') +
+          'Похоже, первая строка — названия столбцов. Включи «Первая строка — заголовки», если так.';
+      }
+    }
 
     return {
       getRows: () => clone(allRows),
+      getExportRows: exportRows,
+      isDirty: () => history.length > 0,
       setRows: (next) => applyAll(next),
-      pasteFromClipboard: () => ingestClipboard(),
-      downloadXlsx: () => downloadXlsx(allRows, toolsBase),
+      downloadXlsx: () => downloadXlsx(exportRows(), toolsBase),
       destroy: () => {
-        document.removeEventListener('paste', onPaste, true);
+        document.removeEventListener('mouseup', stopDrag, true);
         container.replaceChildren();
       },
     };
@@ -522,6 +757,7 @@
     parseHtmlTable,
     loadXlsx,
     downloadXlsx,
+    downloadXlsxBook,
     toTsv: (rows) => rows.map((r) => r.join('\t')).join('\n'),
     toCsv: (rows, sep) => {
       const s = sep || ';';
@@ -539,6 +775,7 @@
             '<tr>' +
             r
               .map((c) => {
+                if (isPercentText(c)) return `<td>${esc(c)}</td>`;
                 const n = parseRuNumber(c);
                 if (n !== null) return `<td>${n}</td>`;
                 return `<td style="mso-number-format:'\\@'">${esc(c)}</td>`;

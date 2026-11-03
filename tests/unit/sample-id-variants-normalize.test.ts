@@ -19,10 +19,9 @@ describe('sample id-variants fixture', () => {
     expect(meta.merged).toBe(3);
     expect(rows).toHaveLength(fixture.smartExpectedRows);
     for (let i = 0; i < fixture.smartIds.length; i++) {
-      expect(rows[i]![0]).toContain(fixture.smartIds[i]!);
+      expect(rows[i]![1]).toBe(fixture.smartIds[i]!);
     }
-    // money stays in column 2 (index 1), not shoved right by an id column
-    expect(rows[0]![1]).toBe('12763,50');
-    expect(rows[1]![1]).toBe('5000,00');
+    expect(rows[0]![2]).toBe('12763,50');
+    expect(rows[1]![2]).toBe('5000,00');
   });
 });

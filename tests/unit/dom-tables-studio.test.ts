@@ -20,7 +20,7 @@ describe('dom-tables → studio', () => {
     const code = readFileSync(join(root, 'public/tools/dom-tables.js'), 'utf8');
     expect(code).toContain('table-studio.js');
     expect(code).toContain('__CH_Studio');
-    expect(code).toContain('Умная таблица: ВКЛ');
+    expect(code).toContain('Код в столбец');
     expect(code).toContain('Открыть в редакторе');
   });
 

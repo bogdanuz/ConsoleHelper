@@ -1,4 +1,5 @@
 (async () => {
+  const CH_VERSION = window.__CH_VERSION__ || '0.12.1';
   const HOTKEY_CODE = 'KeyH';
   const mode = window.__CH_MODE__ || 'open';
   window.__CH_MODE__ = undefined;
@@ -150,9 +151,20 @@
             b.title = hint;
             b.onmouseenter = () => (b.style.background = '#262c36');
             b.onmouseleave = () => (b.style.background = '#1e232b');
+            const fatShot = !!(window.__CH_BUNDLE__ && t.id === 'screenshot');
+            if (fatShot) {
+              b.disabled = true;
+              b.style.opacity = '0.45';
+              b.style.cursor = 'default';
+              const note = document.createElement('div');
+              note.style.cssText = 'font-size:11px;color:#e6c07b;font-weight:400;margin-top:2px';
+              note.textContent = 'только обычная закладка';
+              b.appendChild(note);
+            }
             b.onclick = (ev) => {
               ev.preventDefault();
               ev.stopPropagation();
+              if (fatShot) return;
               void run(t);
             };
             return b;
@@ -169,7 +181,7 @@
     credit.href = 'https://github.com/bogdanuz';
     credit.target = '_blank';
     credit.rel = 'noopener noreferrer';
-    credit.textContent = 'github.com/bogdanuz';
+    credit.textContent = 'github.com/bogdanuz · ' + CH_VERSION;
     credit.style.cssText =
       'display:block;margin-top:8px;padding-top:8px;border-top:1px solid #2a3038;' +
       'font-size:11px;color:#8b919a;text-align:center;text-decoration:none;flex-shrink:0';

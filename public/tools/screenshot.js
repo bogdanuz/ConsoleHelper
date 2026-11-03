@@ -1,4 +1,7 @@
 ﻿(async () => {
+  window.__tx?.destroy?.();
+  window.__tp?.destroy?.();
+  window.__cards?.destroy?.();
   window.__ch_shot?.destroy?.();
 
   const base =
@@ -313,6 +316,7 @@
     }
   };
 
+  let scrollPace = 'normal';
   let scrollStop = false;
   const onScrollEsc = (e) => {
     if (e.key === 'Escape') {
@@ -324,7 +328,9 @@
     scrolling = true;
     scrollStop = false;
     const startY = window.scrollY;
-    const maxSteps = 40;
+    const pace = scrollPace === 'short' ? { steps: 12, wait: 280 } : scrollPace === 'long' ? { steps: 120, wait: 350 } : { steps: 40, wait: 450 };
+    const maxSteps = pace.steps;
+    if (panel._chHold) panel._chHold(true);
     setStatus('Прокрутка 0/' + maxSteps + '… Esc — стоп, «Закрыть» — выход');
     addEventListener('keydown', onScrollEsc, true);
     let lastH = 0;
@@ -334,7 +340,7 @@
         if (scrollStop) break;
         window.scrollTo(0, document.documentElement.scrollHeight);
         setStatus('Прокрутка ' + (i + 1) + '/' + maxSteps + '… Esc — стоп');
-        await new Promise((r) => setTimeout(r, 450));
+        await new Promise((r) => setTimeout(r, pace.wait));
         const h = document.documentElement.scrollHeight;
         if (h <= lastH + 2) {
           stable++;
@@ -346,6 +352,7 @@
       else setStatus('Прокрутка остановлена', 'ok');
     } finally {
       scrolling = false;
+      if (panel._chHold) panel._chHold(false);
       removeEventListener('keydown', onScrollEsc, true);
       window.scrollTo(0, startY);
     }
@@ -359,6 +366,15 @@
     el('button', btnCss, 'Страница уже вся загружена', () => runSafe(captureFullPage)),
     tip('Если прокрутка вниз не добавляет новых строк — этот режим.'),
     el('button', btnCss, 'Список подгружается при прокрутке', () => runSafe(autoScrollThenCapture)),
+    el('button', btnSecondary, 'Короче', () => {
+      scrollPace = 'short';
+    }),
+    el('button', btnSecondary, 'Обычно', () => {
+      scrollPace = 'normal';
+    }),
+    el('button', btnSecondary, 'До конца', () => {
+      scrollPace = 'long';
+    }),
     tip('Если при ручной прокрутке появляются новые строки — этот режим.'),
     el('div', 'font-size:11px;color:#9aa0a6;margin:4px 0', 'Не уверен? Прокрути вниз вручную и посмотри, растёт ли список.'),
     el('button', btnCss, 'Выделить область', () => pickRegion()),
@@ -368,6 +384,24 @@
     }),
   );
   root.appendChild(panel);
+  panel.style.transition = 'transform .2s ease';
+  panel.style.transform = 'translateX(calc(100% - 36px))';
+  let dockTimer = 0;
+  panel.addEventListener('mouseenter', () => {
+    clearTimeout(dockTimer);
+    panel.style.transform = 'translateX(0)';
+  });
+  panel.addEventListener('mouseleave', () => {
+    clearTimeout(dockTimer);
+    dockTimer = setTimeout(() => {
+      if (panel.dataset.chHold === '1') return;
+      panel.style.transform = 'translateX(calc(100% - 36px))';
+    }, 2000);
+  });
+  panel._chHold = (on) => {
+    panel.dataset.chHold = on ? '1' : '';
+    if (on) panel.style.transform = 'translateX(0)';
+  };
 
   window.__ch_shot = { destroy };
 })();

@@ -1,4 +1,4 @@
-import { parseRuNumber } from './parseRuNumber';
+import { isPercentText, parseRuNumber } from './parseRuNumber';
 
 export type XlsxSheetJs = {
   utils: {
@@ -13,6 +13,7 @@ export type XlsxSheetJs = {
 export function gridToAoa(rows: string[][]): (string | number)[][] {
   return rows.map((row) =>
     row.map((cell) => {
+      if (isPercentText(String(cell))) return String(cell);
       const n = parseRuNumber(String(cell));
       return n === null ? String(cell) : n;
     }),

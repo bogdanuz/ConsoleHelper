@@ -85,15 +85,15 @@ describe('debug review2', () => {
     emptyBtn.click();
     const labelOn = emptyBtn.textContent || '';
     const sum = [...box.querySelectorAll('div')].map((d) => d.textContent || '').find((t) =>
-      /на экране/.test(t),
+      /Показаны/.test(t),
     );
     await log('H9', 'debug-review2:H9', 'filter UX', {
       labelOn,
       truncNote: sum || '',
-      hasTrunc: /на экране 5 из/.test(sum || ''),
+      hasTrunc: /Показаны 5 из/.test(sum || ''),
     });
     expect(labelOn).toMatch(/ВКЛ/i);
-    expect(sum).toMatch(/на экране 5 из/);
+    expect(sum).toMatch(/Показаны 5 из/);
   });
 
   it('H10: hub catalog builds cards without innerHTML template', async () => {
