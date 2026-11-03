@@ -1,0 +1,10 @@
+{
+  "raw": [
+    ["Sample catalog item Alpha", "12763,50", "1000", "0"],
+    ["ID-1001-A", "", "", ""],
+    ["Sample catalog item Beta", "5000,00", "0", "0"],
+    ["ID-1001-B", "", "", ""]
+  ],
+  "smartExpectedRows": 2,
+  "smartFirstId": "ID-1001-A"
+}

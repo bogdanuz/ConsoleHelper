@@ -1,0 +1,12 @@
+---
+description: Require automated tests for logic, UX mechanics, and algorithms
+alwaysApply: true
+---
+
+# Тесты обязательны
+
+- Любая новая логика в `src/core/` → unit-тест в `tests/unit/`.
+- Новая кнопка / механика UI → тест в `tests/ux/` или component/integration.
+- Алгоритм normalize / build / locale → фикстуры «до/после», в т.ч. кейс лишних строк.
+- Перед завершением задачи: `npm test`. Падения чинить сразу, не оставлять красным.
+- Ручная перепроверка после автотестов: пройти сценарий кнопки ещё раз по чеклисту в STATUS/sprint.

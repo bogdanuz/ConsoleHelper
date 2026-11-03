@@ -1,0 +1,16 @@
+---
+description: Keep STATUS, CHANGELOG, sprint notes in sync with every change
+alwaysApply: true
+---
+
+# Документация всегда актуальна
+
+После каждого смыслового шага обновляй:
+
+1. `docs/STATUS.md` — что сделано / в работе / следующий шаг
+2. `docs/CHANGELOG.md` — секция `[Unreleased]`
+3. Активный файл в `docs/sprints/` — статусы задач
+
+При смене этапа — `docs/ROADMAP.md`.  
+При смене архитектуры — `docs/architecture/`.  
+README — только если меняется пользовательский сценарий или структура корня.

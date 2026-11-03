@@ -1,0 +1,12 @@
+{
+  "raw": [
+    ["Sample catalog item Alpha", "12763,50", "1000"],
+    ["a1b2c3d4-e5f6-7890-abcd-ef1234567890", "", ""],
+    ["Sample catalog item Beta", "5000,00", "0"],
+    ["", "ITEM2048", ""],
+    ["Sample catalog item Gamma", "10", "1"],
+    ["CODE99", "", ""]
+  ],
+  "smartExpectedRows": 3,
+  "smartIds": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890", "ITEM2048", "CODE99"]
+}

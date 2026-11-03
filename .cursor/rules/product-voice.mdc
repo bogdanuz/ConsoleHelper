@@ -1,0 +1,19 @@
+---
+description: Speak to product owner in user stories; explain terms; keep docs/version current
+alwaysApply: true
+---
+
+# Голос продукта
+
+Владелец — **не разработчик**. Отвечай user story + шаги на экране. Термины называй и сразу расшифровывай.
+
+После спринта, операции или явной просьбы обнови:
+
+1. `docs/STATUS.md`
+2. `docs/CHANGELOG.md`
+3. активный `docs/sprints/…`
+4. при релизе — версию (`package.json` + `docs/VERSIONING.md`)
+
+Решения продукта фиксируй в `docs/DECISIONS.md`.  
+План уровней — `docs/PLAN.md`.  
+Скилл: `product-owner-plain`.

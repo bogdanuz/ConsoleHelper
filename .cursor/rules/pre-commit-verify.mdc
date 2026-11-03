@@ -1,0 +1,14 @@
+---
+description: Require npm run verify green before any commit
+alwaysApply: true
+---
+
+# Тесты до коммита
+
+Перед коммитом (когда пользователь просит закоммитить):
+
+1. Запусти `npm run verify` (unit + build + e2e).
+2. Коммить только если всё зелёное.
+3. Обнови STATUS/CHANGELOG в том же шаге.
+
+Не предлагай коммит «на потом потестим».

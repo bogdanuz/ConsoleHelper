@@ -1,0 +1,30 @@
+[
+  {
+    "id": "launcher",
+    "name": "Меню",
+    "file": "tools/launcher.js",
+    "tag": "система",
+    "desc": "Список инструментов"
+  },
+  {
+    "id": "text-to-table",
+    "name": "Текст → таблица",
+    "file": "tools/text-to-table.js",
+    "tag": "таблицы",
+    "desc": "Собрать таблицу с экрана"
+  },
+  {
+    "id": "dom-tables",
+    "name": "Найти таблицы",
+    "file": "tools/dom-tables.js",
+    "tag": "таблицы",
+    "desc": "Подсветить таблицы на странице"
+  },
+  {
+    "id": "screenshot",
+    "name": "Скриншот",
+    "file": "tools/screenshot.js",
+    "tag": "файл",
+    "desc": "Сохранить картинку экрана"
+  }
+]

@@ -1,0 +1,14 @@
+---
+description: TypeScript + Vite + GitHub Pages conventions for ConsoleHelper
+globs: "{src,tests,public}/**/*.{ts,tsx,js,css,html}"
+alwaysApply: false
+---
+
+# Стек хаба и tools
+
+- Хаб: TypeScript, Vite, без тяжёлого UI-фреймворка на MVP.
+- In-page tools в `public/tools/*.js` — IIFE, идемпотентные, `window.__ch_*`.
+- Shared алгоритмы живут в `src/core/` и покрыты Vitest.
+- Не тащить серверный код: всё статическое под GitHub Pages.
+- Тёмная тема по умолчанию; минимум хрома; один главный CTA на экран.
+- Русская локаль чисел: пробел = тысячи, запятая = дробь.
