@@ -62,6 +62,10 @@ describe('launcher / tools smoke', () => {
 
     const box = document.querySelector('[data-ch="1"]') as HTMLElement;
     expect(box.querySelector('input')).toBeTruthy();
+    const credit = box.querySelector('a') as HTMLAnchorElement;
+    expect(credit.href).toBe('https://github.com/bogdanuz');
+    expect(credit.target).toBe('_blank');
+    expect(credit.textContent).toBe('github.com/bogdanuz');
     const buttons = box.querySelectorAll('button');
     expect(buttons.length).toBeGreaterThan(0);
     expect([...buttons].some((b) => /таблица|таблиц|Скриншот|DOM/i.test(b.textContent || ''))).toBe(

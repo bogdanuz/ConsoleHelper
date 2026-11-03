@@ -63,10 +63,10 @@
     const box = document.createElement('div');
     box.setAttribute('data-ch', '1');
     box.style.cssText =
-      'position:fixed;right:16px;top:16px;width:340px;max-height:80vh;overflow:auto;z-index:2147483647;' +
+      'position:fixed;right:16px;top:16px;width:340px;max-height:80vh;overflow:hidden;z-index:2147483647;' +
       'background:#171a1f;color:#e8eaed;border:1px solid #2a3038;border-radius:10px;' +
       'box-shadow:0 8px 32px rgba(0,0,0,.55);font:14px/1.4 system-ui,sans-serif;padding:10px;' +
-      'pointer-events:auto';
+      'pointer-events:auto;display:flex;flex-direction:column';
     window.__ch_menu = box;
 
     const tip = document.createElement('div');
@@ -81,6 +81,7 @@
       'width:100%;box-sizing:border-box;padding:8px 10px;margin-bottom:8px;border:1px solid #2a3038;' +
       'border-radius:6px;background:#0e0f12;color:#e8eaed;outline:none';
     const list = document.createElement('div');
+    list.style.cssText = 'overflow:auto;flex:1;min-height:0';
 
     const toolUrl = (file) => {
       const name = String(file).replace(/^tools\//, '');
@@ -164,7 +165,22 @@
       if (e.key === 'Enter') list.querySelector('button')?.click();
     };
 
-    box.append(tip, q, list);
+    const credit = document.createElement('a');
+    credit.href = 'https://github.com/bogdanuz';
+    credit.target = '_blank';
+    credit.rel = 'noopener noreferrer';
+    credit.textContent = 'github.com/bogdanuz';
+    credit.style.cssText =
+      'display:block;margin-top:8px;padding-top:8px;border-top:1px solid #2a3038;' +
+      'font-size:11px;color:#8b919a;text-align:center;text-decoration:none;flex-shrink:0';
+    credit.onmouseenter = () => {
+      credit.style.color = '#e8eaed';
+    };
+    credit.onmouseleave = () => {
+      credit.style.color = '#8b919a';
+    };
+
+    box.append(tip, q, list, credit);
     document.documentElement.appendChild(box);
     render();
     q.focus();

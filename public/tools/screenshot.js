@@ -54,9 +54,6 @@
     if (root.querySelector('[style*="crosshair"]')) return;
     e.preventDefault();
     e.stopPropagation();
-    // #region agent log
-    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'post-fix',hypothesisId:'H2',location:'screenshot.js:onToolEsc',message:'esc on screenshot',data:{scrolling},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (scrolling) {
       scrollStop = true;
       setStatus('Останавливаю прокрутку…');
