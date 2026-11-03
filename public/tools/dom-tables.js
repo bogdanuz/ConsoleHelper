@@ -90,16 +90,24 @@
     let splitName = 0;
     let rows = input.map((r) => [...r]);
     if (splitMultilineName) {
-      rows = rows.map((row) => {
+      const parsed = rows.map((row) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-        if (parts.length < 2) return row;
-        const next = [...row];
-        next[0] = parts[0];
-        next.splice(1, 0, parts.slice(1).join(' '));
-        splitName++;
-        return next;
+        if (parts.length < 2) return { split: false, row: [...row] };
+        return { split: true, row: [parts[0], parts.slice(1).join(' '), ...row.slice(1)] };
       });
+      if (parsed.some((p) => p.split)) {
+        rows = parsed.map((p) => {
+          if (p.split) {
+            splitName++;
+            return p.row;
+          }
+          const r = p.row;
+          if (r.length >= 2 && looksLikeId(String(r[1] || ''))) return r;
+          if (looksLikeId(String(r[0] || '')) && !looksLikeTitle(String(r[0] || ''))) return r;
+          return [r[0] || '', '', ...r.slice(1)];
+        });
+      }
     }
     if (mergeIdRows) {
       const out = [];
@@ -431,8 +439,24 @@
   addEventListener('resize', onMove);
   const timer = setInterval(place, 700);
 
+  const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
+  const onToolEsc = (e) => {
+    if (!isEscKey(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (modal.style.display === 'flex') {
+      modal.style.display = 'none';
+      studioApi?.destroy?.();
+      studioApi = null;
+      return;
+    }
+    window.__tp?.destroy?.();
+  };
+  addEventListener('keydown', onToolEsc, true);
+
   window.__tp = {
     destroy() {
+      removeEventListener('keydown', onToolEsc, true);
       clear();
       studioApi?.destroy?.();
       root.remove();

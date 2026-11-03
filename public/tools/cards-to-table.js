@@ -229,15 +229,32 @@
     'position:fixed;right:16px;bottom:16px;pointer-events:auto;background:#171a1f;color:#e8eaed;border:1px solid #2a3038;border-radius:10px;padding:8px;box-shadow:0 2px 12px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:6px;max-width:280px',
   );
   panel.append(
-    el('div', 'font-size:12px;color:#9aa0a6', 'Плитки/карточки → строки таблицы'),
+    el('div', 'font-size:12px;color:#9aa0a6', 'Плитки/карточки → строки таблицы · Esc — закрыть'),
     el('button', B + ';background:#1a7f37', 'Выделить область', pickRegion),
     el('button', B + ';background:#0b5cad', 'Вся видимая зона', () => void run(null)),
     el('button', B + ';background:#a00', '✕', () => window.__cards.destroy()),
   );
   root.appendChild(panel);
 
+  const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
+  const onToolEsc = (e) => {
+    if (!isEscKey(e)) return;
+    if (root.querySelector('[style*="crosshair"]')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (modal.style.display === 'flex') {
+      modal.style.display = 'none';
+      studioApi?.destroy?.();
+      studioApi = null;
+      return;
+    }
+    window.__cards?.destroy?.();
+  };
+  addEventListener('keydown', onToolEsc, true);
+
   window.__cards = {
     destroy() {
+      removeEventListener('keydown', onToolEsc, true);
       studioApi?.destroy?.();
       root.remove();
       delete window.__cards;

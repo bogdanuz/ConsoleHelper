@@ -235,11 +235,15 @@
     const hint = el(
       'div',
       'font-size:12px;color:#9aa0a6',
-      'Клик — выделить для суммы. Двойной клик — править. «✕» — удалить строку.',
+      'Фильтр сверху · клик по числу — сумма · двойной клик — правка · «✕» — удалить строку.',
     );
     const tools = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
     const filterRow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
-    const sumLine = el('div', 'font-size:12px;color:#3dd68c;min-height:1.2em', '');
+    const sumLine = el(
+      'div',
+      'font-size:13px;color:#9aa0a6;min-height:1.4em;font-weight:600',
+      'Выбрано: 0 · кликни по числам — появится сумма',
+    );
     const scroller = el(
       'div',
       'flex:1;overflow:auto;border:1px solid #2a3038;background:#0e0f12;border-radius:8px;min-height:120px',
@@ -273,12 +277,16 @@
       const trunc =
         viewLen > maxRows ? ` · на экране ${maxRows} из ${viewLen} (фильтр/правки по всем)` : '';
       if (!count) {
-        sumLine.textContent = trunc ? trunc.replace(/^ · /, '') : '';
+        sumLine.style.color = '#9aa0a6';
+        sumLine.textContent = trunc
+          ? `Выбрано: 0 · кликни по числам${trunc}`
+          : 'Выбрано: 0 · кликни по числам — появится сумма';
         return;
       }
       const sumText = numericCount
         ? sum.toLocaleString('ru-RU', { maximumFractionDigits: 6 })
-        : '—';
+        : '— (среди выбранных нет чисел)';
+      sumLine.style.color = '#3dd68c';
       sumLine.textContent = `Выбрано: ${count} · Сумма: ${sumText}${trunc}`;
     };
 
@@ -327,7 +335,8 @@
       'input',
       'flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #2a3038;background:#0e0f12;color:#e8eaed;font:12px system-ui',
     );
-    filterInput.placeholder = 'Фильтр…';
+    filterInput.placeholder = 'Фильтр по тексту в любой ячейке…';
+    filterInput.setAttribute('aria-label', 'Фильтр строк');
     filterInput.oninput = () => {
       filterQuery = filterInput.value;
       render();

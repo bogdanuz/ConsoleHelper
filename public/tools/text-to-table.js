@@ -57,15 +57,21 @@
     let merged = 0;
     let rows = input.map((r) => [...r]);
     if (splitMultilineName) {
-      rows = rows.map((row) => {
+      const parsed = rows.map((row) => {
         const first = row[0] || '';
         const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-        if (parts.length < 2) return row;
-        const next = [...row];
-        next[0] = parts[0];
-        next.splice(1, 0, parts.slice(1).join(' '));
-        return next;
+        if (parts.length < 2) return { split: false, row: [...row] };
+        return { split: true, row: [parts[0], parts.slice(1).join(' '), ...row.slice(1)] };
       });
+      if (parsed.some((p) => p.split)) {
+        rows = parsed.map((p) => {
+          if (p.split) return p.row;
+          const r = p.row;
+          if (r.length >= 2 && looksLikeId(String(r[1] || ''))) return r;
+          if (looksLikeId(String(r[0] || '')) && !looksLikeTitle(String(r[0] || ''))) return r;
+          return [r[0] || '', '', ...r.slice(1)];
+        });
+      }
     }
     if (mergeIdRows) {
       const out = [];
@@ -371,6 +377,23 @@
   modal.append(bar, view);
   root.appendChild(modal);
 
+  const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
+  const onToolEsc = (e) => {
+    if (!isEscKey(e)) return;
+    if (root.querySelector('[style*="crosshair"]')) return; // region pick has own Esc
+    e.preventDefault();
+    e.stopPropagation();
+    if (modal.style.display === 'flex') {
+      modal.style.display = 'none';
+      studioApi?.destroy?.();
+      studioApi = null;
+      return;
+    }
+    scrollStop = true;
+    window.__tx?.destroy?.();
+  };
+  addEventListener('keydown', onToolEsc, true);
+
   const run = (region) => {
     frags = collect(region);
     if (!frags.length) {
@@ -488,6 +511,7 @@
     ),
     tip('Список растёт, когда крутишь вниз.'),
     tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери прокрутку; если ничего нового — «уже вся загружена».'),
+    tip('Esc — закрыть редактор, ещё раз Esc — закрыть инструмент.'),
     scrollNote,
     el('button', B + ';background:#a00', '✕', () => {
       scrollStop = true;
@@ -498,6 +522,8 @@
 
   window.__tx = {
     destroy() {
+      removeEventListener('keydown', onToolEsc, true);
+      removeEventListener('keydown', onScrollEsc, true);
       studioApi?.destroy?.();
       root.remove();
       delete window.__tx;

@@ -47,7 +47,20 @@
     status.style.color = kind === 'err' ? '#f07178' : kind === 'ok' ? '#3dd68c' : '#9aa0a6';
   };
 
+  const isEscKey = (e) => e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
+  const onToolEsc = (e) => {
+    if (!isEscKey(e)) return;
+    if (root.querySelector('[style*="crosshair"]')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    scrollStop = true;
+    destroy();
+  };
+  addEventListener('keydown', onToolEsc, true);
+
   const destroy = () => {
+    removeEventListener('keydown', onToolEsc, true);
+    removeEventListener('keydown', onScrollEsc, true);
     root.remove();
     delete window.__ch_shot;
   };

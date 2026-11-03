@@ -94,7 +94,8 @@
       window.__ch_menu_cleanup = undefined;
     };
     const onDocKey = (e) => {
-      if (e.key !== 'Escape') return;
+      const esc = e.key === 'Escape' || e.key === 'Esc' || e.code === 'Escape';
+      if (!esc) return;
       e.preventDefault();
       e.stopPropagation();
       closeMenu();

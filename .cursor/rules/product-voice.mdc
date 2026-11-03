@@ -17,3 +17,5 @@ alwaysApply: true
 Решения продукта фиксируй в `docs/DECISIONS.md`.  
 План уровней — `docs/PLAN.md`.  
 Скилл: `product-owner-plain`.
+
+После смысловой работы всегда дай владельцу: **версию** + **готовый текст коммита** для GitHub Desktop (см. pre-commit-verify).

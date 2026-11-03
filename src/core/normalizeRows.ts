@@ -23,15 +23,38 @@ function pad(rows: string[][]): string[][] {
   });
 }
 
-function splitFirstCell(row: string[]): { row: string[]; split: boolean } {
-  const first = row[0] ?? '';
-  const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
-  if (parts.length < 2) return { row, split: false };
-  const [name, id, ...rest] = parts;
-  const next = [...row];
-  next[0] = name ?? '';
-  next.splice(1, 0, [id, ...rest].join(' '));
-  return { row: next, split: true };
+/**
+ * If any first cell has name\\nid lines, pull id into its own column for ALL rows
+ * so numbers stay under the same column index (do not shove metrics sideways only on some rows).
+ */
+function applySplitMultilineNames(rows: string[][]): { rows: string[][]; splitName: number } {
+  const parsed = rows.map((row) => {
+    const first = row[0] ?? '';
+    const parts = first.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return { split: false as const, row: [...row] };
+    const [name, ...restParts] = parts;
+    return {
+      split: true as const,
+      row: [name ?? '', restParts.join(' '), ...row.slice(1)],
+    };
+  });
+  if (!parsed.some((p) => p.split)) return { rows, splitName: 0 };
+
+  let splitName = 0;
+  const out = parsed.map((p) => {
+    if (p.split) {
+      splitName++;
+      return p.row;
+    }
+    const r = p.row;
+    // Already has an id-like 2nd cell — keep columns as-is.
+    if (r.length >= 2 && looksLikeId(String(r[1] ?? ''))) return r;
+    // Id-only first cell — no title to split.
+    if (looksLikeId(String(r[0] ?? '')) && !looksLikeTitle(String(r[0] ?? ''))) return r;
+    // Insert empty id column so metrics align with split rows.
+    return [r[0] ?? '', '', ...r.slice(1)];
+  });
+  return { rows: out, splitName };
 }
 
 function extractDept(row: string[]): string[] {
@@ -64,11 +87,9 @@ export function normalizeRows(
   let rows = input.map((r) => [...r]);
 
   if (splitMultilineName) {
-    rows = rows.map((r) => {
-      const { row, split } = splitFirstCell(r);
-      if (split) splitName++;
-      return row;
-    });
+    const applied = applySplitMultilineNames(rows);
+    rows = applied.rows;
+    splitName = applied.splitName;
   }
 
   if (mergeIdRows) {

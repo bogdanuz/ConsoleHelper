@@ -28,6 +28,21 @@ describe('normalizeRows', () => {
     expect(rows[0]![1]).toBe('ID-1001-A');
   });
 
+  it('adds id column for all rows so metrics stay aligned', () => {
+    const input = [
+      ['Sample item\nID-1001-A', '100', '200'],
+      ['Other item', '50', '75'],
+    ];
+    const { rows, meta } = normalizeRows(input, {
+      mergeIdRows: false,
+      splitMultilineName: true,
+    });
+    expect(meta.splitName).toBe(1);
+    expect(rows[0]).toEqual(['Sample item', 'ID-1001-A', '100', '200']);
+    // empty id slot — numbers stay in same columns as the split row
+    expect(rows[1]).toEqual(['Other item', '', '50', '75']);
+  });
+
   it('extracts department suffix', () => {
     const input = [['Demo project (TEAM)', '10']];
     const { rows } = normalizeRows(input, {
