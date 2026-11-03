@@ -1,6 +1,9 @@
 # Local concept notes / screenshots — keep on disk, never push
 concept/
 
+# Quarantine instead of delete — local only, never on GitHub
+fordelete/
+
 # Dependencies (reinstall with npm install)
 node_modules/
 
@@ -22,10 +25,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.cursor/debug*.log
+.cursor/debug-*.log
+.cursor/**/debug*.log
 
-# Test / coverage
+# Test / coverage / e2e artifacts
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # Bundler / tooling caches
 .vite/
@@ -37,18 +47,23 @@ coverage/
 .DS_Store
 Thumbs.db
 Desktop.ini
+ehthumbs.db
 
 # Editors (keep project .cursor/rules & skills tracked)
 .idea/
 *.swp
 *.swo
+*~
 
 # Local-only overrides
 *.local
 *.local.*
 .vscode/settings.json
+.vscode/*.local.json
 
-# Optional Playwright / e2e artifacts if added later
-test-results/
-playwright-report/
-blob-report/
+# Optional scratch / temp
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig

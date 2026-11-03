@@ -16,11 +16,14 @@ const toolsJson = JSON.parse(readFileSync(join(root, 'public/tools.json'), 'utf8
 describe('launcher / tools smoke', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    (window as unknown as { __ch_menu_cleanup?: () => void }).__ch_menu_cleanup?.();
     delete (window as unknown as { __ch_menu?: HTMLElement }).__ch_menu;
     delete (window as unknown as { __CH_BASE__?: string }).__CH_BASE__;
+    delete (window as unknown as { __ch_hotkeyBound?: boolean }).__ch_hotkeyBound;
   });
 
   afterEach(() => {
+    (window as unknown as { __ch_menu_cleanup?: () => void }).__ch_menu_cleanup?.();
     (window as unknown as { __ch_menu?: HTMLElement }).__ch_menu?.remove();
   });
 
@@ -70,7 +73,7 @@ describe('launcher / tools smoke', () => {
     input.dispatchEvent(new Event('input'));
     expect(box.querySelectorAll('button').length).toBe(1);
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(document.querySelector('[data-ch="1"]')).toBeNull();
   });
 

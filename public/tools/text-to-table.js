@@ -233,40 +233,57 @@
 
   const ensureStudio = async () => {
     if (window.__CH_Studio?.mount) return window.__CH_Studio;
-    const url = new URL('table-studio.js', toolsBase).href + '?' + Date.now();
-    const code = await (await fetch(url)).text();
-    (0, eval)(code);
+    const bundled = window.__CH_BUNDLE__?.sources?.['table-studio.js'];
+    if (bundled) {
+      (0, eval)(bundled);
+    } else {
+      const url = new URL('table-studio.js', toolsBase).href + '?' + Date.now();
+      const code = await (await fetch(url)).text();
+      (0, eval)(code);
+    }
     if (!window.__CH_Studio?.mount) throw new Error('Table Studio не загрузился');
     return window.__CH_Studio;
   };
 
   const currentRows = () => (studioApi ? studioApi.getRows() : grid);
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
     const rows = currentRows();
+    if (window.__CH_Studio?.downloadXlsx) {
+      const ok = await window.__CH_Studio.downloadXlsx(rows, toolsBase);
+      if (ok) {
+        status.textContent = status.textContent.replace(/ · Excel.*$/, '') + ' · Excel .xlsx';
+        return;
+      }
+    }
     const html = (window.__CH_Studio?.toExcelHtml || ((r) => {
       const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       return '<html><head><meta charset="utf-8"></head><body><table border="1">' +
-        r.map((row) => '<tr>' + row.map((c) => `<td style="mso-number-format:'\\@'">${esc(c)}</td>`).join('') + '</tr>').join('') +
+        r.map((row) => '<tr>' + row.map((c) => `<td>${esc(c)}</td>`).join('') + '</tr>').join('') +
         '</table></body></html>';
     }))(rows);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+    const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+    a.href = url;
     a.download = 'export_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = status.textContent.replace(/ · Excel.*$/, '') + ' · запасной .xls';
   };
 
   const downloadCsv = () => {
     const rows = currentRows();
     const text = (window.__CH_Studio?.toCsv || ((r) => r.map((row) => row.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n')))(rows);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+    a.href = url;
     a.download = 'export_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.csv';
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const copyTSV = async () => {
@@ -322,6 +339,7 @@
     status.textContent = `Слов: ${frags.length}, строк: ${grid.length}, столбцов: ${colsN(grid)}${smart ? ' · умная' : ' · как есть'}`;
     try {
       const Studio = await ensureStudio();
+      studioApi?.destroy?.();
       studioApi = Studio.mount(view, {
         rows: grid,
         onChange: (next) => {
@@ -346,6 +364,8 @@
     el('button', B + ';background:#0b5cad', 'Копировать TSV', copyTSV),
     el('button', B, 'Закрыть', () => {
       modal.style.display = 'none';
+      studioApi?.destroy?.();
+      studioApi = null;
     }),
   );
   modal.append(bar, view);
@@ -417,14 +437,62 @@
     };
   };
 
+  let scrollStop = false;
+  const scrollNote = el('div', 'font-size:11px;color:#9aa0a6;min-height:1.2em', '');
+  const setScrollNote = (t) => {
+    scrollNote.textContent = t || '';
+  };
+  const onScrollEsc = (e) => {
+    if (e.key === 'Escape') scrollStop = true;
+  };
+  const autoScrollThenRun = async () => {
+    scrollStop = false;
+    const startY = window.scrollY;
+    const maxSteps = 40;
+    let lastH = 0;
+    let stable = 0;
+    addEventListener('keydown', onScrollEsc, true);
+    try {
+      for (let i = 0; i < maxSteps; i++) {
+        if (scrollStop) break;
+        setScrollNote('Прокрутка ' + (i + 1) + '/' + maxSteps + '… Esc — стоп');
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        await new Promise((r) => setTimeout(r, 450));
+        const h = document.documentElement.scrollHeight;
+        if (h <= lastH + 2) {
+          stable++;
+          if (stable >= 3) break;
+        } else stable = 0;
+        lastH = h;
+      }
+      // Collect while still at bottom — restoring scroll first can unload lazy lists.
+      setScrollNote(scrollStop ? 'Остановлено' : 'Снимаю…');
+      if (!scrollStop) run(null);
+    } finally {
+      removeEventListener('keydown', onScrollEsc, true);
+      window.scrollTo(0, startY);
+    }
+  };
+
   const panel = el(
     'div',
-    'position:fixed;right:16px;bottom:16px;pointer-events:auto;background:#171a1f;color:#e8eaed;border:1px solid #2a3038;border-radius:10px;padding:8px;box-shadow:0 2px 12px rgba(0,0,0,.45);display:flex;align-items:center',
+    'position:fixed;right:16px;bottom:16px;pointer-events:auto;background:#171a1f;color:#e8eaed;border:1px solid #2a3038;border-radius:10px;padding:10px;box-shadow:0 2px 12px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:6px;max-width:300px',
   );
+  const tip = (t) => el('div', 'font-size:11px;color:#9aa0a6;line-height:1.35', t);
   panel.append(
     el('button', B + ';background:#1a7f37', 'Область', pickRegion),
-    el('button', B + ';background:#0b5cad', 'Вся страница', () => run(null)),
-    el('button', B + ';background:#a00', '✕', () => window.__tx.destroy()),
+    el('button', B + ';background:#0b5cad', 'Страница уже вся загружена', () => run(null)),
+    tip('Нет новых строк при прокрутке вниз.'),
+    el('button', B + ';background:#0b5cad', 'Список подгружается при прокрутке', () =>
+      void autoScrollThenRun(),
+    ),
+    tip('Список растёт, когда крутишь вниз.'),
+    tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери прокрутку; если ничего нового — «уже вся загружена».'),
+    scrollNote,
+    el('button', B + ';background:#a00', '✕', () => {
+      scrollStop = true;
+      window.__tx.destroy();
+    }),
   );
   root.appendChild(panel);
 

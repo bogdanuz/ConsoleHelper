@@ -41,6 +41,19 @@ app.innerHTML = `
       <p class="onboard-tip">Пока страницу не обновил, меню можно снова открыть клавишами <kbd>${LAUNCHER_HOTKEY}</kbd>.</p>
     </section>
 
+    <section class="help-fetch" id="help-fetch" aria-label="Failed to fetch">
+      <h2 class="section-title">Что делать, если Failed to fetch?</h2>
+      <p class="catalog-note">
+        Сайт запретил загрузку меню с адреса ConsoleHelper. Возьми <strong>полную закладку</strong> —
+        код меню уже внутри, без скачивания. Минус: после обновления ConsoleHelper скопируй её снова.
+        Скриншот в полной закладке недоступен — для скриншота нужна обычная закладка.
+      </p>
+      <div class="paste-actions">
+        <button type="button" class="primary" data-fat-copy>Скопировать полную закладку</button>
+      </div>
+      <p class="paste-status" data-fat-status></p>
+    </section>
+
     <section class="catalog" id="catalog" aria-label="Что умеет меню">
       <h2 class="section-title">Что умеет меню</h2>
       <p class="catalog-note">
@@ -73,18 +86,31 @@ function renderCatalog() {
     ...filtered.map((t: ToolMeta) => {
       const item = document.createElement('article');
       item.className = 'card';
-      item.innerHTML = `
-        <div class="card-tag">${t.tag}</div>
-        <h3 class="card-title">${t.name}</h3>
-        <div class="card-block">
-          <div class="card-label">Что делает</div>
-          <p class="card-text">${t.what}</p>
-        </div>
-        <div class="card-block">
-          <div class="card-label">Когда брать</div>
-          <p class="card-text">${t.when}</p>
-        </div>
-      `;
+      const tag = document.createElement('div');
+      tag.className = 'card-tag';
+      tag.textContent = t.tag;
+      const title = document.createElement('h3');
+      title.className = 'card-title';
+      title.textContent = t.name;
+      const blockWhat = document.createElement('div');
+      blockWhat.className = 'card-block';
+      const labelWhat = document.createElement('div');
+      labelWhat.className = 'card-label';
+      labelWhat.textContent = 'Что делает';
+      const textWhat = document.createElement('p');
+      textWhat.className = 'card-text';
+      textWhat.textContent = t.what;
+      blockWhat.append(labelWhat, textWhat);
+      const blockWhen = document.createElement('div');
+      blockWhen.className = 'card-block';
+      const labelWhen = document.createElement('div');
+      labelWhen.className = 'card-label';
+      labelWhen.textContent = 'Когда брать';
+      const textWhen = document.createElement('p');
+      textWhen.className = 'card-text';
+      textWhen.textContent = t.when;
+      blockWhen.append(labelWhen, textWhen);
+      item.append(tag, title, blockWhat, blockWhen);
       return item;
     }),
   );
@@ -181,3 +207,22 @@ backBtn.addEventListener('click', () => {
 searchEl.addEventListener('input', renderCatalog);
 renderOnboard();
 renderCatalog();
+
+const fatBtn = app.querySelector('[data-fat-copy]') as HTMLButtonElement;
+const fatStatus = app.querySelector('[data-fat-status]') as HTMLElement;
+fatBtn.addEventListener('click', async () => {
+  fatStatus.textContent = 'Загружаю…';
+  try {
+    const res = await fetch(new URL('fat-bookmarklet.txt', base).href + '?' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = (await res.text()).trim();
+    if (!text.startsWith('javascript:')) throw new Error('Файл закладки повреждён');
+    await navigator.clipboard.writeText(text);
+    fatStatus.textContent = 'Скопировано. Вставь в адрес новой закладки (как в шагах выше).';
+  } catch (e) {
+    fatStatus.textContent =
+      'Не удалось: ' +
+      ((e as Error).message || String(e)) +
+      '. Обнови страницу через минуту после публикации сайта.';
+  }
+});

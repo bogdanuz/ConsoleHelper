@@ -200,37 +200,50 @@
 
   const ensureStudio = async () => {
     if (window.__CH_Studio?.mount) return window.__CH_Studio;
-    const url = new URL('table-studio.js', toolsBase).href + '?' + Date.now();
-    const code = await (await fetch(url)).text();
-    (0, eval)(code);
+    const bundled = window.__CH_BUNDLE__?.sources?.['table-studio.js'];
+    if (bundled) {
+      (0, eval)(bundled);
+    } else {
+      const url = new URL('table-studio.js', toolsBase).href + '?' + Date.now();
+      const code = await (await fetch(url)).text();
+      (0, eval)(code);
+    }
     if (!window.__CH_Studio?.mount) throw new Error('Table Studio не загрузился');
     return window.__CH_Studio;
   };
 
   const currentRows = () => (studioApi ? studioApi.getRows() : studioRows);
 
-  const downloadExcel = (rows, name) => {
+  const downloadExcel = async (rows, name) => {
+    if (window.__CH_Studio?.downloadXlsx) {
+      const ok = await window.__CH_Studio.downloadXlsx(rows, toolsBase);
+      if (ok) return;
+    }
     const html = (window.__CH_Studio?.toExcelHtml || ((r) =>
       '<html><head><meta charset="utf-8"></head><body><table border="1">' +
-      r.map((row) => '<tr>' + row.map((c) => `<td style="mso-number-format:'\\@'">${esc(c)}</td>`).join('') + '</tr>').join('') +
+      r.map((row) => '<tr>' + row.map((c) => `<td>${esc(c)}</td>`).join('') + '</tr>').join('') +
       '</table></body></html>'))(rows);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+    const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+    a.href = url;
     a.download = (name || 'export') + '_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(url);
   };
   const downloadCsv = () => {
     const rows = currentRows();
     const text = (window.__CH_Studio?.toCsv || ((r) =>
       r.map((row) => row.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n')))(rows);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+    a.href = url;
     a.download = 'export_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.csv';
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(url);
   };
   const copyTSV = async () => {
     const rows = currentRows();
@@ -286,11 +299,13 @@
       });
       html += '</body></html>';
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+      const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+      a.href = url;
       a.download = 'export_all_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
       document.body.appendChild(a);
       a.click();
       a.remove();
+      URL.revokeObjectURL(url);
     }),
     el('button', B, '👁', () => {
       hidden = !hidden;
@@ -328,6 +343,7 @@
     modal.style.display = 'flex';
     try {
       const Studio = await ensureStudio();
+      studioApi?.destroy?.();
       studioApi = Studio.mount(view, {
         rows: studioRows,
         onChange: (next) => {
@@ -343,7 +359,7 @@
   bar.append(
     status,
     smartBtn,
-    el('button', B + ';background:#1a7f37', 'Excel', () => downloadExcel(currentRows())),
+    el('button', B + ';background:#1a7f37', 'Excel', () => void downloadExcel(currentRows())),
     el('button', B + ';background:#0b5cad', 'CSV', downloadCsv),
     el('button', B + ';background:#0b5cad', 'Копировать TSV', copyTSV),
     el('button', B, 'Закрыть', () => {

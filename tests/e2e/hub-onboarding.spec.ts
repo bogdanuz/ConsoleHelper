@@ -14,10 +14,11 @@ test.describe('hub onboarding', () => {
     await expect(page.getByText(/Что это|меню на любой странице/i).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Начать' }).click();
-    await expect(page.getByRole('button', { name: 'Скопировать' })).toBeVisible();
+    const copyShort = page.getByRole('button', { name: 'Скопировать', exact: true });
+    await expect(copyShort).toBeVisible();
     await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
 
-    await page.getByRole('button', { name: 'Скопировать' }).click();
+    await copyShort.click();
     await expect(page.getByRole('button', { name: 'Продолжить' })).toBeVisible();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
@@ -27,10 +28,12 @@ test.describe('hub onboarding', () => {
     await expect(page.getByRole('heading', { name: /Открой меню/ })).toBeVisible();
     await expect(page.getByText(/пустой/i).first()).toBeVisible();
 
+    await expect(page.getByRole('heading', { name: /Failed to fetch/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /полную закладку/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Что умеет меню' })).toBeVisible();
     await expect(page.getByText('Что делает').first()).toBeVisible();
     await expect(page.getByText('Когда брать').first()).toBeVisible();
-    await expect(page.locator('.card-title')).toHaveCount(3);
+    await expect(page.locator('.card-title')).toHaveCount(4);
     await expect(page.locator('.card-title').first()).toContainText(/таблица/i);
   });
 });

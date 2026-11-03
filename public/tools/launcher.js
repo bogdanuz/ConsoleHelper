@@ -18,6 +18,7 @@
   ];
 
   async function loadTools() {
+    if (window.__CH_BUNDLE__?.tools?.length) return window.__CH_BUNDLE__.tools;
     for (const u of toolsUrlCandidates) {
       try {
         const res = await fetch(u + (u.includes('?') ? '&' : '?') + Date.now());
@@ -25,6 +26,14 @@
       } catch (_) {}
     }
     return [];
+  }
+
+  function runEmbedded(file) {
+    const name = String(file).replace(/^tools\//, '');
+    const code = window.__CH_BUNDLE__?.sources?.[name];
+    if (!code) return false;
+    (0, eval)(code);
+    return true;
   }
 
   function toast(msg) {
@@ -42,7 +51,9 @@
   }
 
   async function openMenu() {
+    window.__ch_menu_cleanup?.();
     window.__ch_menu?.remove();
+
     const tools = await loadTools();
     if (!tools.length) {
       alert('ConsoleHelper: не удалось загрузить список инструментов');
@@ -60,7 +71,9 @@
 
     const tip = document.createElement('div');
     tip.style.cssText = 'font-size:12px;color:#9aa0a6;margin-bottom:8px';
-    tip.textContent = 'Alt+Shift+H · Esc — закрыть';
+    tip.textContent = window.__CH_BUNDLE__
+      ? 'Полная закладка · Alt+Shift+H · Esc — закрыть · без обновлений с сайта'
+      : 'Alt+Shift+H · Esc — закрыть';
 
     const q = document.createElement('input');
     q.placeholder = 'Поиск…';
@@ -74,9 +87,28 @@
       return new URL(name, base).href;
     };
 
-    const run = async (t) => {
+    const closeMenu = () => {
       box.remove();
+      document.removeEventListener('keydown', onDocKey, true);
+      if (window.__ch_menu === box) window.__ch_menu = undefined;
+      window.__ch_menu_cleanup = undefined;
+    };
+    const onDocKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+    };
+    document.addEventListener('keydown', onDocKey, true);
+    window.__ch_menu_cleanup = () => {
+      document.removeEventListener('keydown', onDocKey, true);
+      window.__ch_menu_cleanup = undefined;
+    };
+
+    const run = async (t) => {
+      closeMenu();
       try {
+        if (runEmbedded(t.file)) return;
         const res = await fetch(toolUrl(t.file) + '?' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const code = await res.text();
@@ -92,22 +124,34 @@
         ...tools
           .filter((t) => t.id !== 'launcher')
           .filter((t) =>
-            (t.name + ' ' + (t.tag || '') + ' ' + (t.desc || '')).toLowerCase().includes(s),
+            (t.name + ' ' + (t.tag || '') + ' ' + (t.desc || '') + ' ' + (t.hint || ''))
+              .toLowerCase()
+              .includes(s),
           )
           .map((t) => {
             const b = document.createElement('button');
             b.type = 'button';
-            b.innerHTML =
-              t.name + ' <small style="color:#9aa0a6">' + (t.tag || '') + '</small>';
+            const hint = t.hint || t.desc || '';
+            const titleEl = document.createElement('div');
+            titleEl.textContent = t.name;
+            b.appendChild(titleEl);
+            if (hint) {
+              const hintEl = document.createElement('div');
+              hintEl.style.cssText =
+                'font-size:11px;color:#9aa0a6;font-weight:400;margin-top:2px';
+              hintEl.textContent = hint;
+              b.appendChild(hintEl);
+            }
             b.style.cssText =
               'display:block;width:100%;text-align:left;padding:8px 10px;margin:3px 0;border:0;' +
               'border-radius:6px;background:#1e232b;color:#e8eaed;cursor:pointer;font:inherit';
+            b.title = hint;
             b.onmouseenter = () => (b.style.background = '#262c36');
             b.onmouseleave = () => (b.style.background = '#1e232b');
             b.onclick = (ev) => {
               ev.preventDefault();
               ev.stopPropagation();
-              run(t);
+              void run(t);
             };
             return b;
           }),
@@ -116,7 +160,6 @@
 
     q.oninput = render;
     q.onkeydown = (e) => {
-      if (e.key === 'Escape') box.remove();
       if (e.key === 'Enter') list.querySelector('button')?.click();
     };
 

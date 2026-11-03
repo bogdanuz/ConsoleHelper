@@ -5,3 +5,6 @@ export * from './parseRuNumber';
 export * from './exportTable';
 export * from './tableStudioOps';
 export * from './parseClipboard';
+export * from './compactNumbers';
+export * from './studioStats';
+export * from './exportXlsx';

@@ -22,7 +22,6 @@ export function filterTools(tools: ToolMeta[], query: string): ToolMeta[] {
 export function loaderSnippet(baseUrl: string, file: string): string {
   const url = new URL(file, baseUrl).href;
   const toolsBase = new URL('tools/', baseUrl).href;
-  // void(...) — чтобы браузер не подменял вкладку результатом Promise
   return (
     `void(function(){` +
     `window.__CH_BASE__='${toolsBase}';` +
@@ -42,8 +41,8 @@ export const CATALOG_TOOLS: ToolMeta[] = [
     file: 'tools/text-to-table.js',
     tag: 'таблицы',
     desc: 'Собрать таблицу с экрана',
-    what: 'Берёт текст с экрана, показывает редактор: можно поправить ячейки, удалить строки, скачать в Excel.',
-    when: 'Таблица выглядит как текст или ячейки «поехали».',
+    what: 'Берёт текст с экрана, открывает редактор на странице, можно скачать Excel.',
+    when: 'Таблица кривая или «нарисована» текстом.',
   },
   {
     id: 'dom-tables',
@@ -51,8 +50,17 @@ export const CATALOG_TOOLS: ToolMeta[] = [
     file: 'tools/dom-tables.js',
     tag: 'таблицы',
     desc: 'Найти готовые таблицы на странице',
-    what: 'Подсвечивает таблицы на странице, открывает тот же редактор, можно скачать в Excel.',
-    when: 'На сайте уже есть нормальная таблица и она видна целиком.',
+    what: 'Подсвечивает таблицы и открывает тот же редактор.',
+    when: 'На сайте уже есть обычная таблица целиком.',
+  },
+  {
+    id: 'cards-to-table',
+    name: 'Карточки → таблица',
+    file: 'tools/cards-to-table.js',
+    tag: 'таблицы',
+    desc: 'Плитки в строки',
+    what: 'Собирает повторяющиеся карточки/плитки в строки таблицы.',
+    when: 'Данные карточками (каталог, лента), а нужен Excel.',
   },
   {
     id: 'screenshot',
@@ -60,7 +68,7 @@ export const CATALOG_TOOLS: ToolMeta[] = [
     file: 'tools/screenshot.js',
     tag: 'файл',
     desc: 'Картинка экрана',
-    what: 'Сохраняет картинку: всё видимое окно или область, которую обведёшь мышкой.',
+    what: 'Вся страница, прокрутка с подгрузкой или выделенная область.',
     when: 'Нужна картинка, а не файл Excel.',
   },
 ];

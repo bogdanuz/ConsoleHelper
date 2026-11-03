@@ -16,25 +16,28 @@
 ┌─────────────────▼───────────────────────────┐
 │  In-page tools (IIFE)                       │
 │  launcher → text-to-table / dom-tables      │
-│             └─→ table-studio · screenshot   │
+│             cards-to-table · screenshot     │
+│             └─→ table-studio (+ xlsx vendor)│
+│  fat bookmark: __CH_BUNDLE__ (без html2canvas)│
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
 │  Shared core (src/core)                     │
 │  buildGrid · normalizeRows · parseRuNumber  │
-│  exportTsv · exportExcelHtml · tableStudioOps│
+│  exportXlsx · studioStats · compactNumbers  │
+│  exportTsv · tableStudioOps · parseClipboard│
 └─────────────────────────────────────────────┘
 ```
 
 ## Потоки данных
 
-### In-page DOM
+### In-page DOM / текст / карточки
 
-`words/cells → buildGrid → normalizeRows → Table Studio → export`
+`сбор → normalize (опционально) → Table Studio → CSV / TSV / .xlsx`
 
-### Hub paste
+### Вставка в редакторе
 
-`clipboard HTML/TSV/CSV → parseClipboard → normalize → Table Studio / hub preview → export`
+`clipboard HTML/TSV/CSV → parseClipboard → Studio (кнопка «Вставить» / Ctrl+V)`
 
 ## Почему shared core на TypeScript
 

@@ -20,4 +20,11 @@ describe('exportTable', () => {
     expect(html).toContain('&lt;x&gt;');
     expect(html).toContain('<table');
   });
+
+  it('exports spaced numbers as real Excel numbers', () => {
+    const html = toExcelHtml([['10 000', 'Name']]);
+    expect(html).toContain('<td>10000</td>');
+    expect(html).toContain("mso-number-format:'\\@'");
+    expect(html).toContain('Name');
+  });
 });

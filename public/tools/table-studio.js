@@ -90,6 +90,36 @@
 
   const looksLikeHtml = (s) => /<table\b/i.test(s) || /<tr\b/i.test(s);
 
+  const parseRuNumber = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s || s === '—' || s === '-' || s === '–') return null;
+    const cleaned = s.replace(/\s/g, '').replace(/₽/g, '').replace(/%/g, '').replace(/,/g, '.');
+    if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const compactNumericCell = (raw) => {
+    const n = parseRuNumber(raw);
+    if (n === null) return raw;
+    if (Number.isInteger(n)) return String(n);
+    const s = String(n);
+    if (!/[eE]/.test(s)) return s;
+    return n.toFixed(10).replace(/\.?0+$/, '');
+  };
+
+  const compactNumericGrid = (input) => {
+    let changed = 0;
+    const rows = input.map((row) =>
+      row.map((cell) => {
+        const c = compactNumericCell(cell);
+        if (c !== cell) changed++;
+        return c;
+      }),
+    );
+    return { rows, changed };
+  };
+
   const parseClipboard = (input) => {
     const html = String(input?.html || '').trim();
     const text = String(input?.text || '')
@@ -130,21 +160,73 @@
         }
         return out;
       }
-    } catch (_) {
-      /* fall through */
-    }
-    if (navigator.clipboard?.readText) {
-      out.text = await navigator.clipboard.readText();
-    }
+    } catch (_) {}
+    if (navigator.clipboard?.readText) out.text = await navigator.clipboard.readText();
     return out;
   };
 
+  const loadXlsx = async (toolsBase) => {
+    if (window.XLSX?.utils) return window.XLSX;
+    const base =
+      toolsBase ||
+      window.__CH_BASE__ ||
+      new URL('tools/', location.href).href;
+    const candidates = [
+      new URL('../vendor/xlsx.full.min.js', base).href,
+      new URL('vendor/xlsx.full.min.js', base).href,
+    ];
+    for (const src of candidates) {
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('xlsx load fail'));
+          document.head.appendChild(s);
+        });
+        if (window.XLSX?.utils) return window.XLSX;
+      } catch (_) {}
+    }
+    return null;
+  };
+
+  const downloadXlsx = async (rows, toolsBase) => {
+    const XLSX = await loadXlsx(toolsBase);
+    if (!XLSX) return false;
+    const aoa = rows.map((row) =>
+      row.map((cell) => {
+        const n = parseRuNumber(String(cell));
+        return n === null ? String(cell) : n;
+      }),
+    );
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = 'export_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  };
+
   function mount(container, opts) {
-    let rows = pad(clone(opts.rows || []));
+    let allRows = pad(clone(opts.rows || []));
+    let filterQuery = '';
+    let hideEmpty = false;
+    const selected = new Set();
     const onChange = opts.onChange || (() => {});
     const maxRows = opts.maxRows || 500;
     const enablePaste = opts.enablePaste !== false;
     const onPasteInfo = opts.onPasteInfo || (() => {});
+    const toolsBase = opts.toolsBase || window.__CH_BASE__;
 
     const wrap = el(
       'div',
@@ -153,19 +235,57 @@
     const hint = el(
       'div',
       'font-size:12px;color:#9aa0a6',
-      enablePaste
-        ? 'Кликни ячейку — править. «✕» — удалить строку. «Вставить» или Ctrl+V — таблица из буфера.'
-        : 'Кликни ячейку — править. «✕» у строки — удалить. Потом копируй или скачай.',
+      'Клик — выделить для суммы. Двойной клик — править. «✕» — удалить строку.',
     );
     const tools = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
+    const filterRow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
+    const sumLine = el('div', 'font-size:12px;color:#3dd68c;min-height:1.2em', '');
     const scroller = el(
       'div',
       'flex:1;overflow:auto;border:1px solid #2a3038;background:#0e0f12;border-radius:8px;min-height:120px',
     );
 
-    const applyRows = (next, info) => {
-      rows = pad(clone(next || []));
-      onChange(clone(rows));
+    const getView = () => {
+      let list = allRows.map((row, allIndex) => ({ row, allIndex }));
+      if (hideEmpty) list = list.filter((x) => x.row.some((c) => String(c).trim()));
+      if (filterQuery.trim()) {
+        const q = filterQuery.trim().toLowerCase();
+        list = list.filter((x) => x.row.some((c) => String(c).toLowerCase().includes(q)));
+      }
+      return list;
+    };
+
+    const emit = () => onChange(clone(allRows));
+
+    const updateSumLine = () => {
+      let count = 0;
+      let sum = 0;
+      let numericCount = 0;
+      for (const key of selected) {
+        count++;
+        const [rs, cs] = key.split(':');
+        const n = parseRuNumber(String(allRows[Number(rs)]?.[Number(cs)] ?? ''));
+        if (n === null) continue;
+        sum += n;
+        numericCount++;
+      }
+      const viewLen = getView().length;
+      const trunc =
+        viewLen > maxRows ? ` · на экране ${maxRows} из ${viewLen} (фильтр/правки по всем)` : '';
+      if (!count) {
+        sumLine.textContent = trunc ? trunc.replace(/^ · /, '') : '';
+        return;
+      }
+      const sumText = numericCount
+        ? sum.toLocaleString('ru-RU', { maximumFractionDigits: 6 })
+        : '—';
+      sumLine.textContent = `Выбрано: ${count} · Сумма: ${sumText}${trunc}`;
+    };
+
+    const applyAll = (next, info) => {
+      allRows = pad(clone(next || []));
+      selected.clear();
+      emit();
       if (info) onPasteInfo(info);
       render();
     };
@@ -175,41 +295,86 @@
       if (evt?.clipboardData) {
         payload.html = evt.clipboardData.getData('text/html') || '';
         payload.text = evt.clipboardData.getData('text/plain') || '';
-      } else {
-        payload = await readClipboard();
-      }
+      } else payload = await readClipboard();
       const parsed = parseClipboard(payload);
       if (!parsed.rows.length) {
-        onPasteInfo({ ok: false, message: 'В буфере нет таблицы (HTML / TSV / CSV)' });
+        onPasteInfo({ ok: false, message: 'В буфере нет таблицы' });
         return false;
       }
-      applyRows(parsed.rows, {
+      applyAll(parsed.rows, {
         ok: true,
         format: parsed.format,
-        message: `Вставлено: ${parsed.rows.length} стр. (${parsed.format})`,
+        message: `Вставлено: ${parsed.rows.length} стр.`,
       });
       return true;
     };
 
-    if (enablePaste) {
-      const pasteBtn = el(
+    const toolBtn = (label, title, bg, onClick) => {
+      const b = el(
         'button',
-        'border:0;border-radius:6px;padding:6px 10px;color:#fff;background:#3d8bff;cursor:pointer;font:600 12px system-ui',
-        'Вставить',
+        `border:0;border-radius:6px;padding:6px 10px;color:#fff;background:${bg};cursor:pointer;font:600 12px system-ui`,
+        label,
         (e) => {
           e.preventDefault();
-          void ingestClipboard();
+          onClick();
         },
       );
-      pasteBtn.title = 'Вставить таблицу из буфера (HTML / TSV / CSV)';
-      tools.appendChild(pasteBtn);
-      tools.appendChild(
-        el('span', 'font-size:11px;color:#9aa0a6', 'или Ctrl+V в этом окне'),
+      b.title = title;
+      return b;
+    };
+
+    const filterInput = el(
+      'input',
+      'flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #2a3038;background:#0e0f12;color:#e8eaed;font:12px system-ui',
+    );
+    filterInput.placeholder = 'Фильтр…';
+    filterInput.oninput = () => {
+      filterQuery = filterInput.value;
+      render();
+    };
+
+    const emptyBtn = toolBtn('Только непустые', 'Скрыть пустые строки', '#333', () => {
+      hideEmpty = !hideEmpty;
+      emptyBtn.textContent = hideEmpty ? 'Непустые: ВКЛ' : 'Только непустые';
+      emptyBtn.style.background = hideEmpty ? '#0b5cad' : '#333';
+      render();
+    });
+    filterRow.append(
+      filterInput,
+      emptyBtn,
+      toolBtn('Сбросить фильтр', 'Показать все строки', '#333', () => {
+        filterQuery = '';
+        hideEmpty = false;
+        filterInput.value = '';
+        emptyBtn.textContent = 'Только непустые';
+        emptyBtn.style.background = '#333';
+        render();
+      }),
+      toolBtn('Снять выделение', 'Очистить выбор ячеек', '#333', () => {
+        selected.clear();
+        updateSumLine();
+        render();
+      }),
+    );
+
+    tools.append(
+      toolBtn('Числа без пробелов', '«10 000» → «10000»', '#0b5cad', () => {
+        const { rows: next, changed } = compactNumericGrid(allRows);
+        applyAll(next, {
+          ok: true,
+          message: changed ? `Убраны пробелы в ${changed} ячейках` : 'Нечего менять',
+        });
+      }),
+    );
+    if (enablePaste) {
+      tools.append(
+        toolBtn('Вставить', 'Из буфера', '#3d8bff', () => void ingestClipboard()),
       );
     }
 
     const render = () => {
-      rows = pad(rows);
+      allRows = pad(allRows);
+      const view = getView();
       const table = el(
         'table',
         'border-collapse:collapse;font:12px/1.35 system-ui,sans-serif;color:#e8eaed;width:100%',
@@ -218,7 +383,7 @@
       head.appendChild(
         el('th', 'border:1px solid #2a3038;padding:4px 6px;background:#1e232b;width:36px', ''),
       );
-      const cols = rows[0] ? rows[0].length : 0;
+      const cols = allRows[0] ? allRows[0].length : 0;
       for (let c = 0; c < cols; c++) {
         head.appendChild(
           el(
@@ -230,7 +395,7 @@
       }
       table.appendChild(head);
 
-      rows.slice(0, maxRows).forEach((row, ri) => {
+      view.slice(0, maxRows).forEach(({ row, allIndex }) => {
         const tr = el('tr');
         const del = el(
           'button',
@@ -238,29 +403,63 @@
           '✕',
           (e) => {
             e.stopPropagation();
-            rows = rows.filter((_, i) => i !== ri);
-            onChange(clone(rows));
+            const beforeSel = [...selected];
+            allRows = allRows.filter((_, i) => i !== allIndex);
+            const remapped = [];
+            for (const k of beforeSel) {
+              const parts = k.split(':');
+              const r = Number(parts[0]);
+              const c = Number(parts[1]);
+              if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
+              if (r === allIndex) continue;
+              remapped.push(r > allIndex ? r - 1 + ':' + c : k);
+            }
+            selected.clear();
+            remapped.forEach((k) => selected.add(k));
+            emit();
             render();
           },
         );
-        del.title = 'Удалить строку';
         const tdDel = el('td', 'border:1px solid #2a3038;text-align:center;vertical-align:middle');
         tdDel.appendChild(del);
         tr.appendChild(tdDel);
 
         row.forEach((cell, ci) => {
+          const key = allIndex + ':' + ci;
+          const isSel = selected.has(key);
           const td = el(
             'td',
-            'border:1px solid #2a3038;padding:4px 6px;vertical-align:top;min-width:72px;outline:none',
+            'border:1px solid #2a3038;padding:4px 6px;vertical-align:top;min-width:72px;outline:none;cursor:pointer;' +
+              (isSel ? 'background:#1a3a5c;' : ''),
           );
-          td.setAttribute('contenteditable', 'true');
           td.spellcheck = false;
           td.textContent = cell;
+          const isEditing = () => td.getAttribute('contenteditable') === 'true';
+          td.addEventListener('click', (ev) => {
+            if (isEditing()) return;
+            ev.preventDefault();
+            if (selected.has(key)) {
+              selected.delete(key);
+              td.style.background = '';
+            } else {
+              selected.add(key);
+              td.style.background = '#1a3a5c';
+            }
+            updateSumLine();
+          });
+          td.addEventListener('dblclick', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            td.setAttribute('contenteditable', 'true');
+            td.focus();
+          });
           td.addEventListener('blur', () => {
+            if (!isEditing()) return;
+            td.removeAttribute('contenteditable');
             const v = td.textContent || '';
-            if (rows[ri][ci] === v) return;
-            rows[ri][ci] = v;
-            onChange(clone(rows));
+            if (allRows[allIndex][ci] === v) return;
+            allRows[allIndex][ci] = v;
+            emit();
           });
           td.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter') {
@@ -273,12 +472,11 @@
         table.appendChild(tr);
       });
       scroller.replaceChildren(table);
+      updateSumLine();
     };
 
     const onPaste = (ev) => {
-      if (!enablePaste) return;
-      if (!wrap.contains(ev.target)) return;
-      // If editing a single cell with small text paste, let browser handle it
+      if (!enablePaste || !wrap.contains(ev.target)) return;
       const cd = ev.clipboardData;
       if (!cd) return;
       const html = cd.getData('text/html') || '';
@@ -293,14 +491,15 @@
     };
     document.addEventListener('paste', onPaste, true);
 
-    wrap.replaceChildren(hint, tools, scroller);
+    wrap.replaceChildren(hint, filterRow, tools, sumLine, scroller);
     container.replaceChildren(wrap);
     render();
 
     return {
-      getRows: () => clone(rows),
-      setRows: (next) => applyRows(next),
+      getRows: () => clone(allRows),
+      setRows: (next) => applyAll(next),
       pasteFromClipboard: () => ingestClipboard(),
+      downloadXlsx: () => downloadXlsx(allRows, toolsBase),
       destroy: () => {
         document.removeEventListener('paste', onPaste, true);
         container.replaceChildren();
@@ -312,6 +511,8 @@
     mount,
     parseClipboard,
     parseHtmlTable,
+    loadXlsx,
+    downloadXlsx,
     toTsv: (rows) => rows.map((r) => r.join('\t')).join('\n'),
     toCsv: (rows, sep) => {
       const s = sep || ';';
@@ -319,6 +520,7 @@
         .map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(s))
         .join('\n');
     },
+    compactNumericGrid,
     toExcelHtml: (rows) => {
       const esc = (s) =>
         String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -326,7 +528,13 @@
         .map(
           (r) =>
             '<tr>' +
-            r.map((c) => `<td style="mso-number-format:'\\@'">${esc(c)}</td>`).join('') +
+            r
+              .map((c) => {
+                const n = parseRuNumber(c);
+                if (n !== null) return `<td>${n}</td>`;
+                return `<td style="mso-number-format:'\\@'">${esc(c)}</td>`;
+              })
+              .join('') +
             '</tr>',
         )
         .join('');

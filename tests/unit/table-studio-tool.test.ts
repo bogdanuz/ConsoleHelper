@@ -35,12 +35,13 @@ describe('table-studio tool', () => {
 
     expect(box.querySelectorAll('tr').length).toBeGreaterThan(2);
     const dataRow = box.querySelectorAll('tr')[1]!;
-    const editable = [...dataRow.querySelectorAll('td')].find(
-      (td) => (td as HTMLElement).isContentEditable || td.getAttribute('contenteditable') != null,
-    ) as HTMLElement;
-    expect(editable).toBeTruthy();
-    editable.textContent = 'Z';
-    editable.dispatchEvent(new Event('blur'));
+    const cells = [...dataRow.querySelectorAll('td')];
+    const cell = cells[1] as HTMLElement;
+    expect(cell).toBeTruthy();
+    cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(cell.isContentEditable || cell.getAttribute('contenteditable') === 'true').toBe(true);
+    cell.textContent = 'Z';
+    cell.dispatchEvent(new Event('blur'));
     expect(api.getRows()[0]![0]).toBe('Z');
 
     const del = dataRow.querySelector('button') as HTMLButtonElement;

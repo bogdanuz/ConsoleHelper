@@ -1,37 +1,15 @@
 # Дорожная карта
 
-Актуально после аналитики 2026-11-03. Детали: [ANALYTICS.md](ANALYTICS.md), работы: [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md).
-
 ```
-Sprint 0  Foundation                      ✅
-Sprint 1  Onboarding + extractors         ✅
-Sprint 2  Screenshot fix                  ✅
-Sprint 3  Table Studio MVP                ✅
-Sprint 4  DOM → Studio + smarter normalize ✅
-Sprint 5  Paste from clipboard            ✅
-Later     Waves B–D (см. ANALYTICS)       ← дальше по выбору
+Sprint 0–5   Foundation → Paste                 ✅
+0.6.1        Screenshot + числа без пробелов    ✅
+Sprint 6     Толстая закладка / Failed fetch    ✅ (в 0.11.0)
+Sprint 7     Фильтр + суммы кликом              ✅
+Sprint 8     Настоящий .xlsx                    ✅
+Sprint 9     Карточки + подсказки меню          ✅
+Sprint 10    Вся страница vs автопрокрутка      ✅
+Later        Память настроек, сравнение выгрузок
 ```
 
-### Sprint 0–1 — сделано
-
-Каркас, хаб, закладка, launcher, text-to-table, dom-tables, умная склейка, тесты, verify.
-
-### Sprint 2 — Screenshot fix
-
-Без CDN, видимая область + рамка, статус ошибки.
-
-### Sprint 3 — Table Studio MVP ✅
-
-Правка ячеек, удаление строк, CSV/TSV/Excel, тёмный UI; `text-to-table` → Studio.
-
-### Sprint 4 — DOM → Studio + normalize ✅
-
-«Найти таблицы» в тот же редактор; склейка UUID / CODE / сдвинутый id.
-
-### Sprint 5 — Paste ✅
-
-Буфер HTML/TSV/CSV → Studio (хаб + меню + кнопка «Вставить»).
-
-### Позже ← дальше
-
-Автопрокрутка, карточки→таблица, JSON, фильтры, суммы, сравнение, xlsx, память настроек.
+Чеклист после деплоя: [CHECKLIST-0.11.md](CHECKLIST-0.11.md).  
+Спринт-файл волны B: [sprints/sprint-6-10-wave-b.md](sprints/sprint-6-10-wave-b.md).

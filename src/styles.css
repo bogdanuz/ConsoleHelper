@@ -176,6 +176,14 @@ button.ok {
   vertical-align: top;
 }
 
+.help-fetch {
+  margin-top: 40px;
+  padding: 22px;
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
 .catalog {
   margin-top: 48px;
   padding-top: 8px;

@@ -1,18 +1,20 @@
 {
   "name": "console-helper",
-  "version": "0.6.0",
+  "version": "0.11.0",
   "private": true,
   "license": "MIT",
   "type": "module",
   "description": "Catalog of console tools to extract and normalize tables without browser extensions",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build:fat": "node scripts/build-fat-bookmarklet.mjs",
+    "build": "npm run build:fat && tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "verify": "npm test && npm run build && npm run test:e2e"
+    "verify": "npm run build:fat && npm test && npm run build && npm run test:e2e",
+    "vendor:xlsx": "node scripts/copy-xlsx-vendor.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
@@ -21,6 +23,7 @@
     "jsdom": "^26.1.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vitest": "^3.1.4"
+    "vitest": "^3.1.4",
+    "xlsx": "^0.18.5"
   }
 }

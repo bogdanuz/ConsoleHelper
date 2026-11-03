@@ -1,6 +1,6 @@
 # ConsoleHelper
 
-**Версия 0.6.0** · [MIT](LICENSE)
+**Версия 0.11.0** · [MIT](LICENSE)
 
 Сайт: https://bogdanuz.github.io/ConsoleHelper/
 
@@ -12,9 +12,11 @@
 
 Из меню можно:
 - снять таблицу с экрана и поправить;
-- найти готовые таблицы на странице;
-- сделать скриншот;
-- скачать в Excel или скопировать дальше.
+- найти готовые таблицы или собрать карточки в таблицу;
+- сделать скриншот (в т.ч. с прокруткой);
+- скачать настоящий Excel (.xlsx).
+
+Если на сайте «Failed to fetch» — на этой странице есть **полная закладка** (без онлайн-обновлений).
 
 Подходит для Яндекс Браузера, Chrome, Edge.
 
@@ -38,4 +40,4 @@ npm run dev      # http://localhost:5173/ConsoleHelper/
 npm run verify
 ```
 
-Документы проекта: [STATUS](docs/STATUS.md) · [CHANGELOG](docs/CHANGELOG.md) · [DECISIONS](docs/DECISIONS.md)
+Документы: [STATUS](docs/STATUS.md) · [CHANGELOG](docs/CHANGELOG.md) · [чеклист 0.11](docs/CHECKLIST-0.11.md) · [DEPLOY](docs/DEPLOY.md) · [DECISIONS](docs/DECISIONS.md)

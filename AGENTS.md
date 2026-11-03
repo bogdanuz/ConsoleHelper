@@ -3,9 +3,9 @@
 ## Always
 
 - Read `docs/STATUS.md` before starting work.
-- Never delete → move to `fordelete/` with date + reason.
+- Never delete → move to `fordelete/` with date + reason (`fordelete/` is gitignored — local only).
 - After changes: update STATUS, CHANGELOG `[Unreleased]`, active sprint.
-- New logic → tests; run `npm test`.
+- New logic → tests; run `npm test` / `npm run verify` before commit.
 
 ## Skills
 
