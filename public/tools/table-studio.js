@@ -253,7 +253,9 @@
   };
 
   function mount(container, opts) {
-    let allRows = pad(clone(opts.rows || []));
+    const sourceRows = clone(pad(opts.rows || []));
+    let allRows = sourceRows.map((row) => row.map((cell) => compactNumericCell(cell)));
+    let plainNumbers = true;
     let filterQuery = '';
     let hideEmpty = false;
     const selected = new Set();
@@ -292,7 +294,7 @@
     const hint = el(
       'div',
       'font-size:12px;color:#9aa0a6',
-      'Фильтр сверху · клик по числу — сумма · двойной клик — правка · «✕» — удалить строку.',
+      'Зажми левую кнопку и протяни по клеткам — выделение. Под номером столбца: скрыть или удалить. Двойной клик — правка.',
     );
     const tools = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
     const filterRow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center');
@@ -392,17 +394,6 @@
       return b;
     };
 
-    const filterInput = el(
-      'input',
-      'flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #2a3038;background:#0e0f12;color:#e8eaed;font:12px system-ui',
-    );
-    filterInput.placeholder = 'Фильтр по тексту в любой ячейке…';
-    filterInput.setAttribute('aria-label', 'Фильтр строк');
-    filterInput.oninput = () => {
-      filterQuery = filterInput.value;
-      render();
-    };
-
     const emptyBtn = toolBtn('Только непустые', 'Скрыть пустые строки', '#333', () => {
       hideEmpty = !hideEmpty;
       emptyBtn.textContent = hideEmpty ? 'Непустые: ВКЛ' : 'Только непустые';
@@ -410,16 +401,7 @@
       render();
     });
     filterRow.append(
-      filterInput,
       emptyBtn,
-      toolBtn('Сбросить фильтр', 'Показать все строки', '#333', () => {
-        filterQuery = '';
-        hideEmpty = false;
-        filterInput.value = '';
-        emptyBtn.textContent = 'Только непустые';
-        emptyBtn.style.background = '#333';
-        render();
-      }),
       toolBtn('Снять выделение', 'Очистить выбор ячеек', '#333', () => {
         selected.clear();
         updateSumLine();
@@ -441,30 +423,27 @@
     );
     tools.append(
       visibleOnlyBtn,
-      toolBtn('Числа без пробелов', 'Только в выделенных клетках', '#0b5cad', () => {
-        if (!selected.size) {
-          sumLine.style.color = '#e6c07b';
-          sumLine.textContent =
-            'Зажми левую кнопку и протяни по клеткам. Пробелы уберутся только там.';
-          return;
-        }
+      toolBtn('Числа без пробелов: ВКЛ', 'Убирает пробелы в суммах. Нажми ещё раз, чтобы вернуть как на странице.', '#0b5cad', () => {
         pushHist();
-        let changed = 0;
-        for (const key of selected) {
-          const [rs, cs] = key.split(':');
-          const r = Number(rs);
-          const c = Number(cs);
-          const cur = allRows[r]?.[c];
-          if (cur == null) continue;
-          const next = compactNumericCell(cur);
-          if (next !== cur) {
-            allRows[r][c] = next;
-            changed++;
-          }
+        plainNumbers = !plainNumbers;
+        if (plainNumbers) {
+          allRows = allRows.map((row) => row.map((cell) => compactNumericCell(cell)));
+        } else {
+          allRows = allRows.map((row, ri) =>
+            row.map((cell, ci) => {
+              const src = sourceRows[ri]?.[ci];
+              if (src != null && compactNumericCell(src) === cell) return src;
+              return cell;
+            }),
+          );
         }
-        sumLine.textContent = changed
-          ? `Убраны пробелы в ${changed} выделенных ячейках`
-          : 'В выделенном нечего менять';
+        const btn = [...tools.querySelectorAll('button')].find((b) =>
+          /пробел/i.test(b.textContent || ''),
+        );
+        if (btn) {
+          btn.textContent = plainNumbers ? 'Числа без пробелов: ВКЛ' : 'Числа без пробелов: ВЫКЛ';
+          btn.style.background = plainNumbers ? '#0b5cad' : '#333';
+        }
         emit();
         render();
       }),
@@ -521,7 +500,7 @@
       const view = getView();
       const table = el(
         'table',
-        'border-collapse:collapse;font:12px/1.35 system-ui,sans-serif;color:#e8eaed;width:100%',
+        'border-collapse:collapse;font:12px/1.35 system-ui,sans-serif;color:#e8eaed;width:100%;user-select:none',
       );
       const head = el('tr');
       head.appendChild(
@@ -544,10 +523,11 @@
           updateSumLine();
           render();
         };
+        const actions = el('div', 'display:flex;gap:4px;margin-top:4px');
         const hideB = el(
           'button',
-          'margin-left:4px;border:0;background:#333;color:#fff;border-radius:4px;cursor:pointer;font:10px system-ui',
-          'Спрятать',
+          'border:0;background:#3a414c;color:#fff;border-radius:4px;cursor:pointer;font:600 11px system-ui;padding:2px 6px',
+          'Скрыть',
           (e) => {
             e.stopPropagation();
             pushHist();
@@ -555,9 +535,10 @@
             render();
           },
         );
+        hideB.title = 'Убрать столбец с экрана и из файла';
         const delB = el(
           'button',
-          'margin-left:2px;border:0;background:#5a2a2a;color:#fff;border-radius:4px;cursor:pointer;font:10px system-ui',
+          'border:0;background:#6b3030;color:#fff;border-radius:4px;cursor:pointer;font:600 11px system-ui;padding:2px 6px',
           'Удалить',
           (e) => {
             e.stopPropagation();
@@ -584,7 +565,8 @@
             render();
           },
         );
-        th.append(hideB, delB);
+        actions.append(hideB, delB);
+        th.append(actions);
         head.appendChild(th);
       }
       table.appendChild(head);
@@ -637,16 +619,16 @@
             dragAnchor = { r: allIndex, c: ci };
             dragged = false;
           });
-          td.addEventListener('mouseenter', (ev) => {
-            if (!dragAnchor || (ev.buttons & 1) === 0) return;
-            const r1 = Math.min(dragAnchor.r, allIndex);
-            const r2 = Math.max(dragAnchor.r, allIndex);
-            const c1 = Math.min(dragAnchor.c, ci);
-            const c2 = Math.max(dragAnchor.c, ci);
+          const selectTo = (r, c) => {
+            if (!dragAnchor) return;
+            const r1 = Math.min(dragAnchor.r, r);
+            const r2 = Math.max(dragAnchor.r, r);
+            const c1 = Math.min(dragAnchor.c, c);
+            const c2 = Math.max(dragAnchor.c, c);
             if (r1 !== r2 || c1 !== c2) dragged = true;
-            for (let r = r1; r <= r2; r++) {
-              for (let c = c1; c <= c2; c++) {
-                if (!hiddenCols.has(c)) selected.add(r + ':' + c);
+            for (let rr = r1; rr <= r2; rr++) {
+              for (let cc = c1; cc <= c2; cc++) {
+                if (!hiddenCols.has(cc)) selected.add(rr + ':' + cc);
               }
             }
             updateSumLine();
@@ -654,9 +636,10 @@
               const on = selected.has(cell.dataset.k || '');
               cell.style.background = on ? '#1a3a5c' : '';
             });
-            // #region agent log
-            fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'post-fix',hypothesisId:'H1',location:'table-studio.js:drag',message:'drag select without rerender',data:{anchor:dragAnchor,r:allIndex,c:ci,selected:selected.size,cellConnected:td.isConnected},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
+          };
+          td.addEventListener('mouseenter', (ev) => {
+            if (!dragAnchor || (ev.buttons & 1) === 0) return;
+            selectTo(allIndex, ci);
           });
           td.addEventListener('click', (ev) => {
             if (isEditing()) return;
@@ -704,9 +687,34 @@
       updateSumLine();
     };
 
+    const onDragMove = (ev) => {
+      if (!dragAnchor || (ev.buttons & 1) === 0) return;
+      const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+      const cell = hit && hit.closest ? hit.closest('td[data-k]') : null;
+      if (!cell || !cell.dataset.k) return;
+      const parts = cell.dataset.k.split(':');
+      const r = Number(parts[0]);
+      const c = Number(parts[1]);
+      const r1 = Math.min(dragAnchor.r, r);
+      const r2 = Math.max(dragAnchor.r, r);
+      const c1 = Math.min(dragAnchor.c, c);
+      const c2 = Math.max(dragAnchor.c, c);
+      if (r1 !== r2 || c1 !== c2) dragged = true;
+      for (let rr = r1; rr <= r2; rr++) {
+        for (let cc = c1; cc <= c2; cc++) {
+          if (!hiddenCols.has(cc)) selected.add(rr + ':' + cc);
+        }
+      }
+      updateSumLine();
+      scroller.querySelectorAll('td[data-k]').forEach((node) => {
+        const on = selected.has(node.dataset.k || '');
+        node.style.background = on ? '#1a3a5c' : '';
+      });
+    };
     const stopDrag = () => {
       dragAnchor = null;
     };
+    document.addEventListener('mousemove', onDragMove, true);
     document.addEventListener('mouseup', stopDrag, true);
 
     const exportRows = () => {
@@ -745,6 +753,7 @@
       setRows: (next) => applyAll(next),
       downloadXlsx: () => downloadXlsx(exportRows(), toolsBase),
       destroy: () => {
+        document.removeEventListener('mousemove', onDragMove, true);
         document.removeEventListener('mouseup', stopDrag, true);
         container.replaceChildren();
       },

@@ -79,12 +79,11 @@ describe('studio editor contract', () => {
     api.destroy();
   });
 
-  it('removes spaces only in the selected cell', () => {
+  it('compacts numbers on open and restores them when turned off', () => {
     const { box, api } = mount([['10 000', '20 000']]);
-    const cell = box.querySelectorAll('tr')[1]!.querySelectorAll('td')[1] as HTMLElement;
-    cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    button(box, 'Числа без пробелов').click();
-    expect(api.getRows()[0]).toEqual(['10000', '20 000']);
+    expect(api.getRows()[0]).toEqual(['10000', '20000']);
+    button(box, 'Числа без пробелов: ВКЛ').click();
+    expect(api.getRows()[0]).toEqual(['10 000', '20 000']);
     api.destroy();
   });
 

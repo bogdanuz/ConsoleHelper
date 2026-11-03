@@ -46,6 +46,10 @@ describe('esc during autoscroll', () => {
       /подгружается/i.test(b.textContent || ''),
     ) as HTMLButtonElement;
     btn.click();
+    const pace = [...document.querySelectorAll('button')].find((b) =>
+      /Обычная лента/.test(b.textContent || ''),
+    ) as HTMLButtonElement;
+    pace.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     const alive = !!(window as unknown as { __tx?: unknown }).__tx;
     const note = document.body.textContent || '';
@@ -64,6 +68,10 @@ describe('esc during autoscroll', () => {
       /подгружается/i.test(b.textContent || ''),
     ) as HTMLButtonElement;
     btn.click();
+    const pace = [...document.querySelectorAll('button')].find((b) =>
+      /Обычная лента/.test(b.textContent || ''),
+    ) as HTMLButtonElement;
+    pace.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     const alive = !!(window as unknown as { __ch_shot?: unknown }).__ch_shot;
     await agentLog('H2', 'debug-esc-scroll:H2', 'after esc during shot scroll', { alive });

@@ -11,6 +11,7 @@
   let labelValues = false;
   let codeColumn = false;
   let dirty = false;
+  let userPickedModes = false;
   let studioApi = null;
   let studioRows = [];
 
@@ -366,6 +367,7 @@
   };
   const retune = (fn) => {
     if (dirty && !confirm('Собрать заново? Правки пропадут.')) return;
+    userPickedModes = true;
     dirty = false;
     fn();
     if (studioRaw.length) void openStudio(studioRaw, studioTitle, true);
@@ -376,16 +378,19 @@
       codeColumn = false;
     }),
   );
-  const codeBtn = el('button', B, 'Код в столбец', () =>
+  const codeBtn = el('button', B, 'Умная вёрстка', () =>
     retune(() => {
       codeColumn = !codeColumn;
     }),
   );
-  const labelBtn = el('button', B, 'Подпись и число', () =>
+  const labelBtn = el('button', B, 'Название над суммой', () =>
     retune(() => {
       labelValues = !labelValues;
     }),
   );
+  codeBtn.title =
+    'Выравнивает кривую сетку и ставит код в новый столбец, если он нашёлся.';
+  labelBtn.title = 'Для блоков, где название стоит над числом.';
   paintModes();
 
   let studioRaw = [];
@@ -399,6 +404,9 @@
     studioTitle = title || studioTitle || 'Таблица';
     let note = '';
     studioRows = pad(studioRaw);
+    if (!userPickedModes) {
+      codeColumn = JSON.stringify(normalizeRows(studioRaw).rows) !== JSON.stringify(studioRaw);
+    }
     if (labelValues) note = 'не похоже на подписи над числами';
     if (codeColumn) studioRows = normalizeRows(studioRaw).rows;
     paintModes();

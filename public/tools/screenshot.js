@@ -359,22 +359,31 @@
   };
 
   const tip = (text) => el('div', 'font-size:11px;color:#9aa0a6;line-height:1.35;margin:-2px 0 4px', text);
+  const paceMenu = el('div', 'display:none;flex-direction:column;gap:4px', '');
+  const paceBtn = (label, title, pace) => {
+    const b = el('button', btnSecondary, label, () => {
+      scrollPace = pace;
+      paceMenu.style.display = 'none';
+      void runSafe(autoScrollThenCapture);
+    });
+    b.title = title;
+    return b;
+  };
+  paceMenu.append(
+    paceBtn('Короткий список', 'Несколько экранов вниз. Если строк немного.', 'short'),
+    paceBtn('Обычная лента', 'Средняя прокрутка. Подходит чаще всего.', 'normal'),
+    paceBtn('Длинная лента', 'Крутит почти до конца. Если строки появляются долго.', 'long'),
+  );
 
   panel.append(
     title,
     status,
     el('button', btnCss, 'Страница уже вся загружена', () => runSafe(captureFullPage)),
     tip('Если прокрутка вниз не добавляет новых строк — этот режим.'),
-    el('button', btnCss, 'Список подгружается при прокрутке', () => runSafe(autoScrollThenCapture)),
-    el('button', btnSecondary, 'Короче', () => {
-      scrollPace = 'short';
+    el('button', btnCss, 'Список подгружается при прокрутке', () => {
+      paceMenu.style.display = paceMenu.style.display === 'flex' ? 'none' : 'flex';
     }),
-    el('button', btnSecondary, 'Обычно', () => {
-      scrollPace = 'normal';
-    }),
-    el('button', btnSecondary, 'До конца', () => {
-      scrollPace = 'long';
-    }),
+    paceMenu,
     tip('Если при ручной прокрутке появляются новые строки — этот режим.'),
     el('div', 'font-size:11px;color:#9aa0a6;margin:4px 0', 'Не уверен? Прокрути вниз вручную и посмотри, растёт ли список.'),
     el('button', btnCss, 'Выделить область', () => pickRegion()),
@@ -385,7 +394,7 @@
   );
   root.appendChild(panel);
   panel.style.transition = 'transform .2s ease';
-  panel.style.transform = 'translateX(calc(100% - 36px))';
+  panel.style.transform = 'translateX(0)';
   let dockTimer = 0;
   panel.addEventListener('mouseenter', () => {
     clearTimeout(dockTimer);

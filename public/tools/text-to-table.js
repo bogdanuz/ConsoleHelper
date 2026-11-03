@@ -4,7 +4,7 @@
   window.__ch_shot?.destroy?.();
   window.__tx?.destroy?.();
   const BAD = 'script,style,noscript,svg,template,head,[data-tx]';
-  let merge = 6, gap = 14, frags = [], grid = [], rawGrid = [], labelValues = false, codeColumn = false, dirty = false;
+  let merge = 6, gap = 14, frags = [], grid = [], rawGrid = [], labelValues = false, codeColumn = false, dirty = false, userPickedModes = false;
   let studioApi = null;
 
   const toolsBase =
@@ -482,6 +482,7 @@
   };
   const askRebuild = (fn) => {
     if (dirty && !confirm('Собрать заново? Правки пропадут.')) return;
+    userPickedModes = true;
     dirty = false;
     fn();
     void rebuild();
@@ -492,24 +493,32 @@
       codeColumn = false;
     }),
   );
-  const codeBtn = modeBtn('Код в столбец', () =>
+  const codeBtn = modeBtn('Умная вёрстка', () =>
     askRebuild(() => {
       codeColumn = !codeColumn;
     }),
   );
-  const labelBtn = modeBtn('Подпись и число', () =>
+  const labelBtn = modeBtn('Название над суммой', () =>
     askRebuild(() => {
       labelValues = !labelValues;
     }),
   );
-  asIsBtn.title = 'Ничего не менять после съёма';
-  codeBtn.title = 'Новый столбец с кодом на всю таблицу, если код нашёлся';
-  labelBtn.title = 'Только если подписи стоят над числами';
+  asIsBtn.title = 'Оставить таблицу как на странице, без перестройки';
+  codeBtn.title =
+    'Выравнивает кривую сетку и, если рядом с названием есть код, ставит его в новый столбец. Остальные столбцы сдвигаются вместе.';
+  labelBtn.title =
+    'Для блоков, где название стоит над числом. Получается две колонки: название и сумма.';
   const view = el('div', 'flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0');
 
   const rebuild = async () => {
-    paintModes();
     const base = build(frags, merge, gap);
+    if (!userPickedModes) {
+      const paired = pairLabelValues(frags, Math.max(merge, 8));
+      labelValues = !!paired.use;
+      const shaped = paired.use ? paired.rows : base;
+      codeColumn = JSON.stringify(normalizeRows(shaped).rows) !== JSON.stringify(shaped);
+    }
+    paintModes();
     const applied = applyCaptureModes(base, frags, labelValues, codeColumn, Math.max(merge, 8));
     rawGrid = base;
     grid = applied.rows;
@@ -533,9 +542,18 @@
     el('button', B + ';background:#1a7f37', 'Excel', downloadExcel),
     el('button', B + ';background:#0b5cad', 'CSV', downloadCsv),
     el('button', B + ';background:#0b5cad', 'Копировать в Excel (TSV)', copyTSV),
-    el('button', B, 'Точнее', () => {
-      tune.style.display = tune.style.display === 'flex' ? 'none' : 'flex';
-    }),
+    (() => {
+      const wrapTune = el('div', 'position:relative', '');
+      const tuneBtn = el('button', B, 'Сетка', () => {
+        tune.style.display = tune.style.display === 'flex' ? 'none' : 'flex';
+      });
+      tuneBtn.title =
+        'Если столбцы съехали: склейка — насколько близкие слова считать одной ячейкой, зазор — где проводить границу столбца.';
+      tune.style.cssText =
+        'display:none;position:absolute;top:100%;left:0;z-index:2;margin-top:4px;padding:8px;background:#171a1f;border:1px solid #2a3038;border-radius:8px;flex-direction:column;gap:6px;min-width:180px';
+      wrapTune.append(tuneBtn, tune);
+      return wrapTune;
+    })(),
     el('button', B, 'Закрыть', () => {
       modal.style.display = 'none';
       studioApi?.destroy?.();
@@ -709,22 +727,33 @@
     'position:fixed;right:16px;bottom:16px;pointer-events:auto;background:#171a1f;color:#e8eaed;border:1px solid #2a3038;border-radius:10px;padding:10px;box-shadow:0 2px 12px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:6px;max-width:300px',
   );
   const tip = (t) => el('div', 'font-size:11px;color:#9aa0a6;line-height:1.35', t);
+  const paceMenu = el(
+    'div',
+    'display:none;flex-direction:column;gap:4px;padding:4px 0',
+    '',
+  );
+  const paceBtn = (label, title, pace) => {
+    const b = el('button', B, label, () => {
+      scrollPace = pace;
+      paceMenu.style.display = 'none';
+      void autoScrollThenRun();
+    });
+    b.title = title;
+    return b;
+  };
+  paceMenu.append(
+    paceBtn('Короткий список', 'Несколько экранов вниз. Если строк немного.', 'short'),
+    paceBtn('Обычная лента', 'Средняя прокрутка. Подходит чаще всего.', 'normal'),
+    paceBtn('Длинная лента', 'Крутит почти до конца. Если строки появляются долго.', 'long'),
+  );
   panel.append(
     el('button', B + ';background:#1a7f37', 'Область', pickRegion),
     el('button', B + ';background:#0b5cad', 'Страница уже вся загружена', () => run(null)),
     tip('Нет новых строк при прокрутке вниз.'),
-    el('button', B + ';background:#0b5cad', 'Список подгружается при прокрутке', () =>
-      void autoScrollThenRun(),
-    ),
-    el('button', B, 'Короче', () => {
-      scrollPace = 'short';
+    el('button', B + ';background:#0b5cad', 'Список подгружается при прокрутке', () => {
+      paceMenu.style.display = paceMenu.style.display === 'flex' ? 'none' : 'flex';
     }),
-    el('button', B, 'Обычно', () => {
-      scrollPace = 'normal';
-    }),
-    el('button', B, 'До конца', () => {
-      scrollPace = 'long';
-    }),
+    paceMenu,
     tip('Список растёт, когда крутишь вниз.'),
     tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери прокрутку; если ничего нового — «уже вся загружена».'),
     tip('Esc — закрыть редактор, ещё раз Esc — закрыть инструмент.'),
@@ -736,7 +765,7 @@
   );
   root.appendChild(panel);
   panel.style.transition = 'transform .2s ease';
-  panel.style.transform = 'translateX(calc(100% - 36px))';
+  panel.style.transform = 'translateX(0)';
   let dockTimer = 0;
   const dockShow = () => {
     clearTimeout(dockTimer);
