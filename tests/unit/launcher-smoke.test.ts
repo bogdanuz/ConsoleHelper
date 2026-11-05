@@ -78,6 +78,11 @@ describe('launcher / tools smoke', () => {
     input.dispatchEvent(new Event('input'));
     expect(box.querySelectorAll('button').length).toBe(1);
 
+    input.value = 'нет-такого-пункта';
+    input.dispatchEvent(new Event('input'));
+    expect(box.querySelectorAll('button').length).toBe(0);
+    expect(box.textContent).toContain('Ничего не найдено');
+
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(document.querySelector('[data-ch="1"]')).toBeNull();
   });

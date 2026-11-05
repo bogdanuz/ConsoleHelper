@@ -128,6 +128,7 @@
     });
   };
 
+  const panelNote = el('div', 'font-size:12px;color:#e6c07b;line-height:1.35;min-height:1.2em', '');
   const run = async (region) => {
     try {
       const rows = findCards(region);
@@ -136,7 +137,7 @@
         n.style.outline = '3px solid #3d8bff';
       });
       if (!rows.length) {
-        alert('Карточки не найдены. Выдели область плотнее или открой страницу с плитками.');
+        panelNote.textContent = 'Карточки не найдены. Выдели область плотнее или открой страницу с плитками.';
         return;
       }
       const open = confirm('Найдено карточек: ' + rows.length + '. Открыть?');
@@ -144,12 +145,13 @@
         n.style.outline = n.dataset.chOldOutline || '';
       });
       if (!open) {
-        alert('Если это не те блоки, выдели область плотнее.');
+        panelNote.textContent = 'Если это не те блоки, выдели область плотнее.';
         return;
       }
+      panelNote.textContent = '';
       await openRows(rows);
     } catch (e) {
-      alert(e.message || String(e));
+      panelNote.textContent = e.message || String(e);
     }
   };
 
@@ -250,6 +252,7 @@
   );
   panel.append(
     el('div', 'font-size:12px;color:#9aa0a6', 'Плитки/карточки → строки таблицы · Esc — закрыть'),
+    panelNote,
     el('button', B + ';background:#1a7f37', 'Выделить область', pickRegion),
     el('button', B + ';background:#0b5cad', 'Вся видимая зона', () => void run(null)),
     el('button', B + ';background:#a00', '✕', () => window.__cards.destroy()),

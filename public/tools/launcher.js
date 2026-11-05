@@ -1,5 +1,5 @@
 (async () => {
-  const CH_VERSION = window.__CH_VERSION__ || '0.14.2';
+  const CH_VERSION = window.__CH_VERSION__ || '0.16.0';
   const HOTKEY_CODE = 'KeyH';
   const mode = window.__CH_MODE__ || 'open';
   window.__CH_MODE__ = undefined;
@@ -123,14 +123,22 @@
 
     const render = () => {
       const s = q.value.toLowerCase();
+      const matched = tools
+        .filter((t) => t.id !== 'launcher')
+        .filter((t) =>
+          (t.name + ' ' + (t.tag || '') + ' ' + (t.desc || '') + ' ' + (t.hint || ''))
+            .toLowerCase()
+            .includes(s),
+        );
+      if (!matched.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Ничего не найдено';
+        empty.style.cssText = 'font-size:12px;color:#9aa0a6;padding:8px 10px';
+        list.replaceChildren(empty);
+        return;
+      }
       list.replaceChildren(
-        ...tools
-          .filter((t) => t.id !== 'launcher')
-          .filter((t) =>
-            (t.name + ' ' + (t.tag || '') + ' ' + (t.desc || '') + ' ' + (t.hint || ''))
-              .toLowerCase()
-              .includes(s),
-          )
+        ...matched
           .map((t) => {
             const b = document.createElement('button');
             b.type = 'button';
@@ -158,7 +166,7 @@
               b.style.cursor = 'default';
               const note = document.createElement('div');
               note.style.cssText = 'font-size:11px;color:#e6c07b;font-weight:400;margin-top:2px';
-              note.textContent = 'только обычная закладка';
+              note.textContent = 'Скриншот откроется только из обычной закладки';
               b.appendChild(note);
             }
             b.onclick = (ev) => {

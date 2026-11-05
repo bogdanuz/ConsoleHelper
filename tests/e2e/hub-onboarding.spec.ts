@@ -28,7 +28,7 @@ test.describe('hub onboarding', () => {
     await expect(page.getByRole('heading', { name: /Открой меню/ })).toBeVisible();
     await expect(page.getByText(/пустой/i).first()).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: /Failed to fetch/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /меню не загрузилось/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /полную закладку/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Что умеет меню' })).toBeVisible();
     await expect(page.getByText('Что делает').first()).toBeVisible();

@@ -11,6 +11,7 @@ describe('tools.json ↔ hub catalog', () => {
     const tools = JSON.parse(readFileSync(join(root, 'public/tools.json'), 'utf8')) as {
       id: string;
       file: string;
+      desc?: string;
       hint?: string;
     }[];
     const byId = new Map(tools.map((t) => [t.id, t]));
@@ -18,7 +19,8 @@ describe('tools.json ↔ hub catalog', () => {
       const row = byId.get(c.id);
       expect(row, `missing in tools.json: ${c.id}`).toBeTruthy();
       expect(row!.file.replace(/^tools\//, '')).toBe(c.file.replace(/^tools\//, ''));
-      expect(String(row!.hint || '').length, `hint missing: ${c.id}`).toBeGreaterThan(5);
+      expect(row!.hint, `hint differs: ${c.id}`).toBe(c.when);
+      expect(row!.desc, `desc differs: ${c.id}`).toBe(c.desc);
       expect(c.when.length).toBeGreaterThan(5);
       expect(c.what.length).toBeGreaterThan(5);
     }

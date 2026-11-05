@@ -9,29 +9,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-async function agentLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-) {
-  // #region agent log
-  await fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '118115' },
-    body: JSON.stringify({
-      sessionId: '118115',
-      runId: 'final',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 describe('debug final pass', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -71,25 +48,18 @@ describe('debug final pass', () => {
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
     );
     const stillOpen = !!document.querySelector('[data-ch="1"]');
-    await agentLog('F1', 'debug-final-pass:F1', 'esc closes menu', {
-      stillOpen,
-      hasDocEsc: code.includes("e.key === 'Escape'") || code.includes("e.key !== 'Escape'"),
-      hasCleanup: code.includes('__ch_menu_cleanup'),
-    });
     expect(stillOpen).toBe(false);
   });
 
   it('F2: xlsx download revokes object URL', async () => {
     const code = readFileSync(join(root, 'public/tools/table-studio.js'), 'utf8');
     const ok = code.includes('URL.revokeObjectURL(url)');
-    await agentLog('F2', 'debug-final-pass:F2', 'revoke after xlsx', { ok });
     expect(ok).toBe(true);
   });
 
   it('F3: screenshot ignores cards overlay', async () => {
     const code = readFileSync(join(root, 'public/tools/screenshot.js'), 'utf8');
     const ok = code.includes("[data-cards]");
-    await agentLog('F3', 'debug-final-pass:F3', 'ignore cards ui', { ok });
     expect(ok).toBe(true);
   });
 
@@ -98,7 +68,6 @@ describe('debug final pass', () => {
     const tx = readFileSync(join(root, 'public/tools/text-to-table.js'), 'utf8');
     const shotOk = shot.includes('onScrollEsc') && shot.includes('Esc — стоп');
     const txOk = tx.includes('onScrollEsc') && tx.includes('Esc — стоп');
-    await agentLog('F4', 'debug-final-pass:F4', 'esc stops scroll', { shotOk, txOk });
     expect(shotOk).toBe(true);
     expect(txOk).toBe(true);
   });

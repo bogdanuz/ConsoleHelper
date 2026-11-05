@@ -4,27 +4,38 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { alignLines, reconcileGlyphs } from '../../src/core/pdfReconcile';
+import { smartTableRows } from '../../src/core/pdfView';
 import { filterGlyphs, glyphsToGrid, glyphsToPlainText } from '../../src/core/pdfText';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('pdf tool', () => {
   beforeEach(() => {
+    (window as unknown as { __pdf?: { destroy: () => void } }).__pdf?.destroy?.();
+    document.querySelectorAll('[data-pdf]').forEach((node) => node.remove());
     document.body.innerHTML = '';
     delete (window as unknown as { __pdf?: { destroy: () => void } }).__pdf;
+  });
+
+  afterEach(() => {
+    (window as unknown as { __pdf?: { destroy: () => void } }).__pdf?.destroy?.();
+    document.querySelectorAll('[data-pdf]').forEach((node) => node.remove());
   });
 
   it('uses the same text layout as core and stays a separate tool', () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     expect(code).toContain('Выбрать PDF');
-    expect(code).toContain('Область → поле');
-    expect(code).toContain('Страница → таблица');
+    expect(code).toContain('Обведённый кусок');
+    expect(code).toContain('Как на странице');
+    expect(code).not.toContain('127.0.0.1');
+    expect(code).not.toContain('max-height:150px');
+    expect(code).toContain('Таблица');
     expect(code).toContain('textarea');
     expect(code).not.toContain('text-to-table.js');
     (0, eval)(code);
-    const api = (window as unknown as { __pdf: { _test: { filterGlyphs: typeof filterGlyphs; glyphsToPlainText: typeof glyphsToPlainText; glyphsToGrid: typeof glyphsToGrid; reconcileGlyphs: typeof reconcileGlyphs; alignLines: typeof alignLines }; destroy: () => void } }).__pdf;
+    const api = (window as unknown as { __pdf: { _test: { filterGlyphs: typeof filterGlyphs; glyphsToPlainText: typeof glyphsToPlainText; glyphsToGrid: typeof glyphsToGrid; reconcileGlyphs: typeof reconcileGlyphs; alignLines: typeof alignLines; smartTableRows: typeof smartTableRows; wordsToGlyphs: (data: unknown, vp: { convertToPdfPoint: (x: number, y: number) => number[] }) => { glyphs: Array<{ text: string }>; lines: string[] } }; destroy: () => void } }).__pdf;
     const items = [
       { text: 'A', x: 0, y: 20, w: 10, h: 8 },
       { text: 'B', x: 40, y: 20, w: 10, h: 8 },
@@ -41,6 +52,30 @@ describe('pdf tool', () => {
     ];
     expect(api._test.reconcileGlyphs(file, image)).toEqual(reconcileGlyphs(file, image));
     expect(api._test.alignLines(file, image)).toEqual(alignLines(file, image));
+    const stacked = [
+      { text: 'Budget', x: 10, y: 100, w: 50, h: 12 },
+      { text: '100', x: 90, y: 100, w: 30, h: 12 },
+      { text: 'ID-12', x: 10, y: 80, w: 40, h: 12 },
+    ];
+    expect(api._test.smartTableRows(stacked)).toEqual(smartTableRows(stacked));
+    const vp = { convertToPdfPoint: (x: number, y: number) => [x, 200 - y] };
+    const recognized = api._test.wordsToGlyphs(
+      {
+        lines: [
+          {
+            text: 'Budget 100 шт',
+            bbox: { x0: 10, y0: 10, x1: 140, y1: 24 },
+            words: [
+              { text: 'Budget', confidence: 90, bbox: { x0: 10, y0: 10, x1: 60, y1: 24 } },
+              { text: '100', confidence: 90, bbox: { x0: 80, y0: 10, x1: 110, y1: 24 } },
+            ],
+          },
+        ],
+      },
+      vp,
+    );
+    expect(recognized.glyphs.map((item) => item.text)).toEqual(['Budget', '100']);
+    expect(recognized.lines[0]).toBe('Budget 100 шт');
     api.destroy();
   });
 
@@ -50,11 +85,9 @@ describe('pdf tool', () => {
     const click = (label: string) =>
       [...document.querySelectorAll('button')].find((b) => b.textContent === label)?.click();
     const statusText = () => document.querySelector('[data-pdf-status]')?.textContent || '';
-    click('Область → поле');
+    click('Обведённый кусок');
     expect(statusText()).toContain('обведи область');
-    click('Область → таблица');
-    expect(statusText()).toContain('обведи область');
-    click('Страница → поле');
+    click('Эта страница');
     expect(statusText()).toContain('выбери PDF');
     (window as unknown as { __pdf: { destroy: () => void } }).__pdf.destroy();
   });
@@ -62,10 +95,10 @@ describe('pdf tool', () => {
   it('shows a hint and copies the text that is in the field', async () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
-    const pageBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Страница → поле');
+    const pageBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Эта страница');
     pageBtn?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
     const hint = [...document.querySelectorAll('div')].map((node) => node.textContent || '').find((text) =>
-      text.includes('распознано на картинке'),
+      text.includes('как на странице'),
     );
     expect(hint).toBeTruthy();
     const field = document.querySelector('textarea');
@@ -76,7 +109,10 @@ describe('pdf tool', () => {
       configurable: true,
       value: { writeText: async (text: string) => { copied = text; } },
     });
-    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Скопировать')?.click();
+    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Таблица')?.click();
+    const copyBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Скопировать');
+    expect(copyBtn?.parentElement?.style.display || '').not.toBe('none');
+    copyBtn?.click();
     await Promise.resolve();
     expect(copied).toBe('Строка из файла');
     (window as unknown as { __pdf: { destroy: () => void } }).__pdf.destroy();
@@ -112,7 +148,6 @@ describe('pdf tool', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('127.0.0.1:7598')) return originalFetch(input, init);
       fetched.push(url);
       const bytes = new Uint8Array([1, 2, 3, 4]);
       return new Response(bytes, { status: 200, headers: { 'content-length': '4' } });
@@ -184,6 +219,15 @@ describe('pdf tool', () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
     HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { 'content-length': '4' } })) as typeof fetch;
+    (window as unknown as { Tesseract: unknown }).Tesseract = {
+      createWorker: async () => ({
+        recognize: async () => ({ data: { words: [] } }),
+        terminate: async () => {},
+      }),
+    };
     const waiting: Record<number, Array<() => void>> = { 1: [], 2: [] };
     (window as unknown as { pdfjsLib: unknown }).pdfjsLib = {
       getDocument: () => ({
@@ -234,6 +278,7 @@ describe('pdf tool', () => {
     const field = document.querySelector('textarea')?.value || '';
     expect(field).toContain('PageOne');
     expect(field).not.toContain('PageTwo');
+    globalThis.fetch = originalFetch;
     (window as unknown as { __pdf: { destroy: () => void } }).__pdf.destroy();
   });
 
@@ -243,8 +288,6 @@ describe('pdf tool', () => {
     HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes('127.0.0.1:7598')) return originalFetch(input, init);
       return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { 'content-length': '4' } });
     }) as typeof fetch;
     const pending: Array<() => void> = [];
@@ -330,8 +373,6 @@ describe('pdf tool', () => {
     HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes('127.0.0.1:7598')) return originalFetch(input, init);
       return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { 'content-length': '4' } });
     }) as typeof fetch;
     const waiting: Record<number, Array<() => void>> = { 1: [], 2: [] };
@@ -365,7 +406,7 @@ describe('pdf tool', () => {
     const click = (label: string) =>
       [...document.querySelectorAll('button')].find((b) => b.textContent === label)?.click();
     click('→');
-    click('Страница → поле');
+    click('Эта страница');
     const started = Date.now();
     let field = document.querySelector('textarea')?.value || '';
     while (Date.now() - started < 1500) {
@@ -378,5 +419,135 @@ describe('pdf tool', () => {
     expect(field).toContain('PageTwo');
     expect(field).not.toContain('PageOne');
     (window as unknown as { __pdf: { destroy: () => void } }).__pdf.destroy();
+  });
+
+  it('downloads Excel in the same window and keeps the tool when folded', async () => {
+    const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
+    const reconcile = readFileSync(join(root, 'src/core/pdfReconcile.ts'), 'utf8');
+    expect(reconcile).not.toContain('127.0.0.1');
+    (0, eval)(code);
+    const status = () => document.querySelector('[data-pdf-status]')?.textContent || '';
+    const button = (label: string) =>
+      [...document.querySelectorAll('button')].find((b) => b.textContent === label) as HTMLButtonElement;
+    const api = (
+      window as unknown as {
+        __pdf: {
+          destroy: () => void;
+          _test: { setMerged: (glyphs: Array<{ text: string; x: number; y: number; w: number; h: number }>) => void };
+        };
+      }
+    ).__pdf;
+
+    button('Скачать Excel').click();
+    expect(status()).toContain('Сначала выбери, что показать сверху');
+
+    const calls: string[][][] = [];
+    const gate: { release: ((ok: boolean) => void) | null } = { release: null };
+    (window as unknown as { __CH_Studio: { mount: () => object; downloadXlsx: (rows: string[][]) => Promise<boolean> } }).__CH_Studio = {
+      mount: () => ({}),
+      downloadXlsx: (rows) =>
+        new Promise((resolve) => {
+          calls.push(rows);
+          gate.release = resolve;
+        }),
+    };
+    api._test.setMerged([
+      { text: 'Budget', x: 0, y: 20, w: 40, h: 10 },
+      { text: '100', x: 80, y: 20, w: 20, h: 10 },
+    ]);
+    button('Скачать Excel').click();
+    button('Скачать Excel').click();
+    await vi.waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]!.some((row) => row.includes('Budget'))).toBe(true);
+    gate.release?.(true);
+    await vi.waitFor(() => expect(status()).toContain('Excel скачан'));
+
+    button('Таблица').click();
+    expect(button('Скачать Excel').parentElement?.style.display || '').not.toBe('none');
+
+    button('Свернуть окно').click();
+    expect((window as unknown as { __pdf?: unknown }).__pdf).toBeTruthy();
+    button('Закрыть инструмент').click();
+    expect((window as unknown as { __pdf?: unknown }).__pdf).toBeUndefined();
+  });
+
+  it('saves a fallback spreadsheet when the Excel library does not open', async () => {
+    const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
+    (0, eval)(code);
+    const downloads: string[] = [];
+    const original = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function click() {
+      downloads.push(this.download);
+    };
+    const originalUrl = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:demo';
+    URL.revokeObjectURL = () => undefined;
+    (window as unknown as { __CH_Studio: { mount: () => object; downloadXlsx: () => Promise<boolean> } }).__CH_Studio = {
+      mount: () => ({}),
+      downloadXlsx: async () => false,
+    };
+    const api = (
+      window as unknown as {
+        __pdf: {
+          destroy: () => void;
+          _test: { setMerged: (glyphs: Array<{ text: string; x: number; y: number; w: number; h: number }>) => void };
+        };
+      }
+    ).__pdf;
+    api._test.setMerged([{ text: 'Budget', x: 0, y: 20, w: 40, h: 10 }]);
+    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Скачать Excel')?.click();
+    await vi.waitFor(() => expect(downloads.some((name) => name.endsWith('.xls'))).toBe(true));
+    expect(document.querySelector('[data-pdf-status]')?.textContent || '').toContain('запасной');
+    HTMLAnchorElement.prototype.click = original;
+    URL.createObjectURL = originalUrl;
+    URL.revokeObjectURL = originalRevoke;
+    api.destroy();
+  });
+
+  it('still saves a fallback file when the Excel library throws, and the button can be used again', async () => {
+    const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
+    (0, eval)(code);
+    const downloads: string[] = [];
+    const original = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function click() {
+      downloads.push(this.download);
+    };
+    const originalUrl = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:demo';
+    URL.revokeObjectURL = () => undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error('offline');
+    }) as typeof fetch;
+    delete (window as unknown as { __CH_Studio?: unknown }).__CH_Studio;
+    const api = (
+      window as unknown as {
+        __pdf: {
+          destroy: () => void;
+          _test: { setMerged: (glyphs: Array<{ text: string; x: number; y: number; w: number; h: number }>) => void };
+        };
+      }
+    ).__pdf;
+    api._test.setMerged([{ text: 'Budget', x: 0, y: 20, w: 40, h: 10 }]);
+    const excel = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Скачать Excel');
+    excel?.click();
+    await vi.waitFor(() => expect(downloads.some((name) => name.endsWith('.xls'))).toBe(true));
+    (window as unknown as { __CH_Studio: { mount: () => object; downloadXlsx: () => Promise<boolean> } }).__CH_Studio = {
+      mount: () => ({}),
+      downloadXlsx: async () => {
+        throw new Error('library failed');
+      },
+    };
+    downloads.length = 0;
+    excel?.click();
+    await vi.waitFor(() => expect(downloads.some((name) => name.endsWith('.xls'))).toBe(true));
+    expect(document.querySelector('[data-pdf-status]')?.textContent || '').toContain('запасной');
+    HTMLAnchorElement.prototype.click = original;
+    URL.createObjectURL = originalUrl;
+    URL.revokeObjectURL = originalRevoke;
+    globalThis.fetch = originalFetch;
+    api.destroy();
   });
 });

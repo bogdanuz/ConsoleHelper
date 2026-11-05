@@ -21,7 +21,9 @@ describe('fat bookmarklet', () => {
     expect(payload).toContain('pdf-to-text');
     expect(payload).not.toContain('Дашборд → таблица');
     expect(payload).toContain('Сначала обведи область');
-    expect(payload).toContain('Область → поле');
+    expect(payload).toContain('Обведённый кусок');
+    expect(payload).toContain('Скачать Excel');
+    expect(payload).not.toContain('127.0.0.1');
   });
 
   it('launcher supports __CH_BUNDLE__', () => {

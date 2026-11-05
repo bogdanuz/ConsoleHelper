@@ -378,7 +378,11 @@
   panel.append(
     title,
     status,
-    el('button', btnCss, 'Страница уже вся загружена', () => runSafe(captureFullPage)),
+    (() => {
+      const whole = el('button', btnCss, 'Вся страница', () => runSafe(captureFullPage));
+      whole.title = 'Страница уже вся загружена. Нет новых строк при прокрутке вниз.';
+      return whole;
+    })(),
     tip('Если прокрутка вниз не добавляет новых строк — этот режим.'),
     el('button', btnCss, 'Список подгружается при прокрутке', () => {
       paceMenu.style.display = paceMenu.style.display === 'flex' ? 'none' : 'flex';

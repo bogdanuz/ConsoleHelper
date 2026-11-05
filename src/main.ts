@@ -33,18 +33,20 @@ app.innerHTML = `
       <p class="onboard-lead" data-onboard-lead></p>
       <ol class="onboard-how" data-onboard-how></ol>
       <p class="onboard-copied" data-onboard-copied hidden>Скопировано. Теперь нажми «Продолжить».</p>
+      <p class="onboard-error" data-onboard-error hidden>Не удалось скопировать. Выдели команду ниже и нажми Ctrl+C.</p>
+      <textarea class="paste-area" data-onboard-fallback hidden readonly aria-label="Команда закладки"></textarea>
       <div class="onboard-actions">
         <button type="button" class="primary" data-onboard-primary hidden></button>
         <button type="button" class="primary" data-onboard-continue hidden>Продолжить</button>
         <button type="button" data-onboard-back hidden>Назад</button>
       </div>
-      <p class="onboard-tip">Пока страницу не обновил, меню можно снова открыть клавишами <kbd>${LAUNCHER_HOTKEY}</kbd>.</p>
+      <p class="onboard-tip" data-onboard-hotkey hidden>Пока страницу не обновил, меню можно снова открыть клавишами <kbd>${LAUNCHER_HOTKEY}</kbd>.</p>
     </section>
 
-    <section class="help-fetch" id="help-fetch" aria-label="Failed to fetch">
-      <h2 class="section-title">Что делать, если Failed to fetch?</h2>
+    <section class="help-fetch" id="help-fetch" aria-label="Меню не загрузилось">
+      <h2 class="section-title">Что делать, если меню не загрузилось?</h2>
       <p class="catalog-note">
-        Сайт запретил загрузку меню с адреса ConsoleHelper. Возьми <strong>полную закладку</strong> —
+        Браузер может написать Failed to fetch: сайт запретил загрузку меню с адреса ConsoleHelper. Возьми <strong>полную закладку</strong> —
         код меню уже внутри, без скачивания. Минус: после обновления ConsoleHelper скопируй её снова.
         Скриншот в полной закладке недоступен — для скриншота нужна обычная закладка.
       </p>
@@ -72,9 +74,13 @@ const primaryBtn = onboardEl.querySelector('[data-onboard-primary]') as HTMLButt
 const continueBtn = onboardEl.querySelector('[data-onboard-continue]') as HTMLButtonElement;
 const backBtn = onboardEl.querySelector('[data-onboard-back]') as HTMLButtonElement;
 const copiedEl = onboardEl.querySelector('[data-onboard-copied]') as HTMLElement;
+const copyErrorEl = onboardEl.querySelector('[data-onboard-error]') as HTMLElement;
+const copyFallbackEl = onboardEl.querySelector('[data-onboard-fallback]') as HTMLTextAreaElement;
+const hotkeyTipEl = onboardEl.querySelector('[data-onboard-hotkey]') as HTMLElement;
 
 let stepIndex = 0;
 let copiedOnThisStep = false;
+let copyFailed = false;
 
 function renderCatalog() {
   const filtered = filterTools(CATALOG_TOOLS, searchEl.value);
@@ -148,14 +154,17 @@ function renderOnboard() {
   renderDots();
 
   backBtn.hidden = stepIndex === 0;
+  hotkeyTipEl.hidden = step.id !== 'open';
   copiedEl.hidden = !(step.cta === 'copy' && copiedOnThisStep);
+  copyErrorEl.hidden = !(step.cta === 'copy' && copyFailed);
+  copyFallbackEl.hidden = copyErrorEl.hidden;
 
   if (step.cta === 'copy') {
     primaryBtn.hidden = false;
     primaryBtn.textContent = step.ctaLabel;
     primaryBtn.classList.toggle('ok', copiedOnThisStep);
     if (copiedOnThisStep) primaryBtn.textContent = 'Скопировано';
-    continueBtn.hidden = !copiedOnThisStep;
+    continueBtn.hidden = !(copiedOnThisStep || copyFailed);
     continueBtn.textContent = 'Продолжить';
   } else {
     primaryBtn.hidden = false;
@@ -163,13 +172,25 @@ function renderOnboard() {
     primaryBtn.classList.remove('ok');
     continueBtn.hidden = true;
     copiedOnThisStep = false;
+    copyFailed = false;
     copiedEl.hidden = true;
+    copyErrorEl.hidden = true;
+    copyFallbackEl.hidden = true;
   }
 }
 
 async function copyCommand() {
-  await navigator.clipboard.writeText(buildBookmarkletReadable(base));
-  copiedOnThisStep = true;
+  const command = buildBookmarkletReadable(base);
+  try {
+    await navigator.clipboard.writeText(command);
+    copiedOnThisStep = true;
+    copyFailed = false;
+  } catch {
+    copiedOnThisStep = false;
+    copyFailed = true;
+    copyFallbackEl.value = command;
+    copyErrorEl.textContent = 'Не удалось скопировать. Выдели команду ниже и нажми Ctrl+C, затем «Продолжить».';
+  }
   renderOnboard();
 }
 
@@ -179,6 +200,7 @@ function goNext() {
     return;
   }
   copiedOnThisStep = false;
+  copyFailed = false;
   stepIndex = nextStepIndex(stepIndex);
   renderOnboard();
 }
@@ -200,6 +222,7 @@ continueBtn.addEventListener('click', () => goNext());
 
 backBtn.addEventListener('click', () => {
   copiedOnThisStep = false;
+  copyFailed = false;
   stepIndex = clampStep(stepIndex - 1);
   renderOnboard();
 });

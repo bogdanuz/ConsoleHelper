@@ -9,29 +9,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-async function log(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-) {
-  // #region agent log
-  await fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '118115' },
-    body: JSON.stringify({
-      sessionId: '118115',
-      runId: 'review2',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 describe('debug review2', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="box"></div>';
@@ -45,12 +22,6 @@ describe('debug review2', () => {
     const restoreIdx = autoBlock.indexOf('window.scrollTo(0, startY)');
     const goodOrder = runIdx >= 0 && restoreIdx > runIdx;
     const badOrder = /window\.scrollTo\(0, startY\);[\s\S]*run\(null\)/.test(autoBlock);
-    await log('H6', 'debug-review2:H6', 'scroll/collect order', {
-      goodOrder,
-      badOrder,
-      runIdx,
-      restoreIdx,
-    });
     expect(goodOrder).toBe(true);
     expect(badOrder).toBe(false);
   });
@@ -60,7 +31,6 @@ describe('debug review2', () => {
     const dom = readFileSync(join(root, 'public/tools/dom-tables.js'), 'utf8');
     const txOk = /studioApi\?\.destroy\?\.\(\);\s*studioApi = Studio\.mount/.test(tx);
     const domOk = /studioApi\?\.destroy\?\.\(\);\s*studioApi = Studio\.mount/.test(dom);
-    await log('H7', 'debug-review2:H7', 'destroy before mount', { txOk, domOk });
     expect(txOk).toBe(true);
     expect(domOk).toBe(true);
   });
@@ -68,7 +38,6 @@ describe('debug review2', () => {
   it('H8: cards Excel has fallback .xls', async () => {
     const code = readFileSync(join(root, 'public/tools/cards-to-table.js'), 'utf8');
     const hasFallback = code.includes('запасной .xls') && code.includes('toExcelHtml');
-    await log('H8', 'debug-review2:H8', 'cards excel fallback', { hasFallback });
     expect(hasFallback).toBe(true);
   });
 
@@ -87,11 +56,6 @@ describe('debug review2', () => {
     const sum = [...box.querySelectorAll('div')].map((d) => d.textContent || '').find((t) =>
       /Показаны/.test(t),
     );
-    await log('H9', 'debug-review2:H9', 'filter UX', {
-      labelOn,
-      truncNote: sum || '',
-      hasTrunc: /Показаны 5 из/.test(sum || ''),
-    });
     expect(labelOn).toMatch(/ВКЛ/i);
     expect(sum).toMatch(/Показаны 5 из/);
   });
@@ -101,7 +65,6 @@ describe('debug review2', () => {
     const usesUnsafe =
       /item\.innerHTML\s*=\s*`[\s\S]*card-title[\s\S]*\$\{t\.name\}/.test(main);
     const usesText = main.includes("title.textContent = t.name");
-    await log('H10', 'debug-review2:H10', 'catalog render', { usesUnsafe, usesText });
     expect(usesUnsafe).toBe(false);
     expect(usesText).toBe(true);
   });

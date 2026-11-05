@@ -616,7 +616,7 @@
   const run = (region) => {
     frags = collect(region);
     if (!frags.length) {
-      alert('Текст в этой области не найден');
+      setScrollNote('Текст в этой области не найден');
       return;
     }
     for (const [m, g] of [
@@ -748,14 +748,22 @@
   );
   panel.append(
     el('button', B + ';background:#1a7f37', 'Область', pickRegion),
-    el('button', B + ';background:#0b5cad', 'Страница уже вся загружена', () => run(null)),
+    (() => {
+      const whole = el('button', B + ';background:#0b5cad', 'Вся страница', () => run(null));
+      whole.title = 'Страница уже вся загружена. Нет новых строк при прокрутке вниз.';
+      return whole;
+    })(),
     tip('Нет новых строк при прокрутке вниз.'),
-    el('button', B + ';background:#0b5cad', 'Список подгружается при прокрутке', () => {
-      paceMenu.style.display = paceMenu.style.display === 'flex' ? 'none' : 'flex';
-    }),
+    (() => {
+      const scrollBtn = el('button', B + ';background:#0b5cad', 'Прокрутить и собрать', () => {
+        paceMenu.style.display = paceMenu.style.display === 'flex' ? 'none' : 'flex';
+      });
+      scrollBtn.title = 'Список подгружается при прокрутке вниз.';
+      return scrollBtn;
+    })(),
     paceMenu,
     tip('Список растёт, когда крутишь вниз.'),
-    tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери прокрутку; если ничего нового — «уже вся загружена».'),
+    tip('Не уверен? Прокрути вниз вручную — если появились новые строки, бери «Прокрутить и собрать»; если ничего нового — «Вся страница».'),
     tip('Esc — закрыть редактор, ещё раз Esc — закрыть инструмент.'),
     scrollNote,
     el('button', B + ';background:#a00', '✕', () => {

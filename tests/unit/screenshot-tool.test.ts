@@ -15,6 +15,7 @@ describe('screenshot tool', () => {
 
   it('loads vendored html2canvas and offers full page + scroll + region', () => {
     expect(code).toContain('vendor/html2canvas.min.js');
+    expect(code).toContain("'Вся страница'");
     expect(code).toContain('Страница уже вся загружена');
     expect(code).toContain('подгружается при прокрутке');
     expect(code).toContain('Выделить область');

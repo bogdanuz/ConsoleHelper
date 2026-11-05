@@ -101,6 +101,53 @@
       return next;
     });
   };
+  const looksLikeId = (text) => {
+    const t = String(text || '').trim();
+    if (!t || t.length > 64) return false;
+    if (/^-?\d+([.,]\d+)?$/.test(t.replace(/\s/g, ''))) return false;
+    return (
+      /^[A-ZА-Я]{1,6}[-_]\d[\w.-]*$/i.test(t) ||
+      /^[A-Z]{2,}[-_]\d[\w.-]*$/i.test(t) ||
+      /^PJ[-_][\w.-]+$/i.test(t) ||
+      /^[A-ZА-Я]{2,8}\d{2,8}([.-][\w.-]+)?$/i.test(t) ||
+      (/^\d{2,}([-_]\d+){1,4}$/.test(t) && t.length <= 32)
+    );
+  };
+  const looksLikeTitle = (text) => {
+    const t = String(text || '').trim();
+    if (!t || looksLikeId(t) || /^-?\d+([.,]\d+)?$/.test(t.replace(/\s/g, ''))) return false;
+    return t.length >= 3 && /[A-Za-zА-Яа-я]/.test(t);
+  };
+  const smartTableRows = (items) => {
+    let rows = glyphsToGrid(items).map((row) => [...row]);
+    const out = [];
+    const pending = [];
+    rows.forEach((row) => {
+      const idToken = row.map((cell) => String(cell || '').trim()).find((cell) => looksLikeId(cell)) || '';
+      const prev = out[out.length - 1];
+      const continuation =
+        prev &&
+        looksLikeTitle(prev[0] || '') &&
+        row.filter((cell) => String(cell || '').trim()).length <= 2 &&
+        idToken &&
+        !(prev[1] && looksLikeId(prev[1])) &&
+        !pending[pending.length - 1];
+      if (continuation && prev) {
+        pending[pending.length - 1] = idToken;
+        return;
+      }
+      out.push([...row]);
+      pending.push('');
+    });
+    const withId = pending.some(Boolean)
+      ? out.map((row, i) => {
+          const next = [...row];
+          next.splice(1, 0, pending[i] || '');
+          return next;
+        })
+      : out;
+    return withId.filter((row) => row.some((cell) => String(cell || '').trim()));
+  };
   const compactText = (text) => String(text || '').replace(/\s+/g, '').toLowerCase();
   const sameText = (a, b) => {
     const left = compactText(a);
@@ -178,6 +225,28 @@
       }))
       .filter((line) => line.file || line.image);
   };
+  const slideText = (fileGlyphs, imageGlyphs, imageLines) => {
+    const rows = alignLines(fileGlyphs, imageGlyphs);
+    const lines = imageLines || [];
+    if (!rows.length) return lines.filter(Boolean).join('\n');
+    return rows
+      .map((row, index) => {
+        const picture =
+          lines[index] && lines[index].replace(/\s/g, '').length > String(row.image || '').replace(/\s/g, '').length + 1
+            ? lines[index]
+            : row.image;
+        const file = row.file || '';
+        if (!file) return picture || '';
+        if (!picture) return file;
+        const fileCompact = file.replace(/\s/g, '');
+        const pictureCompact = picture.replace(/\s/g, '');
+        if (pictureCompact.includes(fileCompact) && pictureCompact.length > fileCompact.length + 1) return picture;
+        if (fileCompact.includes(pictureCompact)) return file;
+        return (file + ' ' + picture).trim();
+      })
+      .filter(Boolean)
+      .join('\n');
+  };
 
   const root = document.createElement('div');
   root.setAttribute('data-pdf', '1');
@@ -238,7 +307,7 @@
   progressWrap.append(progressLabel, progressTrack);
   const compare = el(
     'div',
-    'display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:150px;overflow:auto;font:12px/1.35 ui-monospace,Consolas,monospace',
+    'display:grid;grid-template-columns:1fr 1fr;gap:6px;font:12px/1.35 ui-monospace,Consolas,monospace',
   );
   const setProgress = (visible, percent, label) => {
     progressWrap.style.display = visible ? 'block' : 'none';
@@ -246,17 +315,73 @@
     progressBar.style.width = value + '%';
     progressLabel.textContent = label ? label + ' · ' + value + '%' : value + '%';
   };
+  const textWrap = el('div', 'display:flex;flex-direction:column;gap:6px;flex:1;min-height:0');
+  const tableWrap = el('div', 'display:none;flex:1;min-height:0;overflow:auto;border:1px solid #2a3038;border-radius:8px;background:#0e0f12');
+  textWrap.append(
+    draft,
+    el('div', 'font-size:11px;color:#9aa0a6', 'Сопоставление: слева буквы из файла, справа с картинки. Так видно, что к чему относится.'),
+    compare,
+  );
+  let viewMode = 'text';
+  let lastMerged = [];
+  const textModeBtn = el('button', B + ';background:#0b5cad', 'Как на странице');
+  const tableModeBtn = el('button', B, 'Таблица');
+  const paintTable = () => {
+    tableWrap.replaceChildren();
+    const rows = smartTableRows(lastMerged);
+    if (!rows.length) {
+      tableWrap.append(el('div', 'padding:10px;color:#9aa0a6', 'Сначала выбери, что показать сверху: страницу, кусок или весь файл.'));
+      return;
+    }
+    const table = document.createElement('table');
+    table.style.cssText = 'border-collapse:collapse;width:100%;font:13px/1.35 sans-serif';
+    rows.forEach((row, index) => {
+      const tr = document.createElement('tr');
+      row.forEach((cell) => {
+        const td = document.createElement('td');
+        td.textContent = cell;
+        const numeric = /^-?\d+(?:[.,]\d+)?$/.test(String(cell || '').replace(/\s/g, ''));
+        td.style.cssText = 'border:1px solid #2a3038;padding:6px 8px;vertical-align:top;white-space:pre-wrap' + (numeric ? ';text-align:right;font-variant-numeric:tabular-nums' : '');
+        tr.appendChild(td);
+      });
+      if (index % 2 === 1) tr.style.background = '#14181e';
+      table.appendChild(tr);
+    });
+    tableWrap.appendChild(table);
+  };
+  const setView = (mode) => {
+    viewMode = mode;
+    textWrap.style.display = mode === 'text' ? 'flex' : 'none';
+    tableWrap.style.display = mode === 'table' ? 'block' : 'none';
+    textModeBtn.style.background = mode === 'text' ? '#0b5cad' : '#333';
+    tableModeBtn.style.background = mode === 'table' ? '#1a7f37' : '#333';
+    if (mode === 'table') paintTable();
+  };
+  textModeBtn.title = 'Показать обычный текст в том порядке, как на странице.';
+  tableModeBtn.title = 'Показать те же буквы таблицей. Кривые переносы собираются, как в «Текст → таблица».';
+  textModeBtn.onclick = () => setView('text');
+  tableModeBtn.onclick = () => setView('table');
+  textModeBtn.onmouseenter = () => {
+    hint.textContent = textModeBtn.title;
+  };
+  tableModeBtn.onmouseenter = () => {
+    hint.textContent = tableModeBtn.title;
+  };
+  const switchRow = el('div', 'display:flex;gap:6px;flex-wrap:wrap');
+  switchRow.append(textModeBtn, tableModeBtn);
+  const viewPane = el('div', 'flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px');
+  viewPane.append(progressWrap, textWrap, tableWrap);
+  side.style.minHeight = '0';
+  side.style.overflow = 'hidden';
   side.append(
-    el('div', 'font-weight:600', 'Общий текст'),
+    el('div', 'font-weight:600', 'Окно просмотра'),
     el(
       'div',
       'font-size:11px;color:#9aa0a6;line-height:1.35',
-      'Сначала буквы из файла. Рядом дописывается то, чего в файле не было, но видно на картинке. Поле можно править.',
+      'Кнопки сверху выбирают, что показать. Здесь переключается вид: текст как на странице или таблица.',
     ),
-    progressWrap,
-    draft,
-    el('div', 'font-size:11px;color:#9aa0a6', 'Рядом: слева из файла, справа с картинки.'),
-    compare,
+    switchRow,
+    viewPane,
   );
   body.append(stage, side);
   modal.append(bar, hint, body);
@@ -319,6 +444,7 @@
   let tableBox = null;
   let workerPromise = null;
   const ocrByPage = new Map();
+  const ocrLines = new Map();
   draft.addEventListener('input', () => {
     if (!writing) userEdited = true;
   });
@@ -368,9 +494,6 @@
       throw err;
     }
     if (mine !== token) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'review5',hypothesisId:'H4',location:'pdf-to-text.js:showPage',message:'apply page',data:{num,token},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     pageGlyphs = await glyphsFromPage(page);
     if (mine !== token) return;
     glyphsPage = num;
@@ -384,6 +507,7 @@
     );
     modal.style.display = 'flex';
     panel.style.display = 'none';
+    if (typeof markSource === 'function') markSource('page');
     void finishView('page', mine, false);
   };
 
@@ -580,6 +704,11 @@
         },
       });
       try {
+        await worker.setParameters({ preserve_interword_spaces: '1' });
+      } catch {
+        /* older reader builds ignore this */
+      }
+      try {
         localStorage.setItem('ch-ocr-v1', '1');
       } catch {
         /* private mode */
@@ -591,26 +720,49 @@
     });
     return workerPromise;
   };
-  const wordsToGlyphs = (words, vp) => (words || [])
-    .filter((word) => word && String(word.text || '').trim() && (word.confidence == null || word.confidence >= 35))
-    .map((word) => {
-      const box = word.bbox || {};
-      const a = vp.convertToPdfPoint(box.x0 || 0, box.y0 || 0);
-      const b = vp.convertToPdfPoint(box.x1 || 0, box.y1 || 0);
-      return {
-        text: String(word.text).trim(),
-        x: Math.min(a[0], b[0]),
-        y: Math.min(a[1], b[1]),
-        w: Math.abs(b[0] - a[0]) || 4,
-        h: Math.abs(b[1] - a[1]) || 8,
-      };
-    });
+  const keepWord = (word) => word && String(word.text || '').trim() && (word.confidence == null || word.confidence >= 0);
+  const boxGlyph = (text, box, vp) => {
+    const a = vp.convertToPdfPoint(box?.x0 || 0, box?.y0 || 0);
+    const b = vp.convertToPdfPoint(box?.x1 || 0, box?.y1 || 0);
+    return {
+      text: String(text || '').replace(/\s+/g, ' ').trim(),
+      x: Math.min(a[0], b[0]),
+      y: Math.min(a[1], b[1]),
+      w: Math.abs(b[0] - a[0]) || 4,
+      h: Math.abs(b[1] - a[1]) || 8,
+    };
+  };
+  const wordsToGlyphs = (data, vp) => {
+    const lines = (data && data.lines) || [];
+    if (lines.length) {
+      const out = [];
+      const linesOut = [];
+      lines.forEach((line) => {
+        const words = (line.words || []).filter(keepWord);
+        const lineText = String(line.text || '').replace(/\s+/g, ' ').trim();
+        const wordText = words.map((word) => String(word.text || '').trim()).join('');
+        const lineLonger = !!(lineText && lineText.replace(/\s/g, '').length > wordText.replace(/\s/g, '').length + 1 && line.bbox);
+        if (words.length) {
+          words.forEach((word) => {
+            const glyph = boxGlyph(word.text, word.bbox, vp);
+            if (glyph.text) out.push(glyph);
+          });
+          linesOut.push(lineLonger ? lineText : '');
+          return;
+        }
+        if (lineText && line.bbox) {
+          const glyph = boxGlyph(lineText, line.bbox, vp);
+          if (glyph.text) out.push(glyph);
+          linesOut.push(lineText);
+        }
+      });
+      if (out.length || linesOut.length) return { glyphs: out, lines: linesOut };
+    }
+    const glyphs = ((data && data.words) || []).filter(keepWord).map((word) => boxGlyph(word.text, word.bbox, vp)).filter((glyph) => glyph.text);
+    return { glyphs, lines: [] };
+  };
   const recognizePage = async (index, myToken, onPart) => {
-    const cacheHit = ocrByPage.has(index);
-    // #region agent log
-    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'pre-fix',hypothesisId:'H3',location:'pdf-to-text.js:recognizePage',message:'picture cache',data:{index,cacheHit,cacheSize:ocrByPage.size,token:myToken},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (cacheHit) return ocrByPage.get(index);
+    if (ocrByPage.has(index)) return ocrByPage.get(index);
     const page = await pdfDoc.getPage(index);
     const base = page.getViewport({ scale: 1 });
     const scale = Math.min(1.75, 1800 / Math.max(base.width, 1));
@@ -625,25 +777,22 @@
     onPart(0, 'Распознаю картинку');
     const result = await worker.recognize(shot);
     if (myToken !== token) return null;
-    const glyphs = wordsToGlyphs(result && result.data && result.data.words, vp);
-    // #region agent log
-    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'review6',hypothesisId:'H7',location:'pdf-to-text.js:recognizePage',message:'cache write',data:{index,myToken,token,stale:myToken!==token},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    const parsed = wordsToGlyphs(result && result.data, vp);
+    const glyphs = parsed.glyphs || [];
     ocrByPage.set(index, glyphs);
+    ocrLines.set(index, parsed.lines || []);
     return glyphs;
   };
   const gather = async (which, myToken) => {
     const indexes = which === 'file' ? Array.from({ length: pageCount }, (_, i) => i + 1) : [pageNum];
     const fileAll = [];
     const imageAll = [];
+    const imageLines = [];
     for (let n = 0; n < indexes.length; n++) {
       if (myToken !== token) return null;
       const index = indexes[n];
       const dy = which === 'file' ? (index - 1) * 100000 : 0;
       let fileGlyphs = index === glyphsPage ? pageGlyphs : null;
-      // #region agent log
-      fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'review6',hypothesisId:'H8',location:'pdf-to-text.js:gather',message:'file glyphs source',data:{index,pageNum,reused:index===pageNum,glyphCount:(pageGlyphs||[]).length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!fileGlyphs) fileGlyphs = await glyphsFromPage(await pdfDoc.getPage(index));
       fileAll.push(...fileGlyphs.map((item) => ({ ...item, y: item.y - dy })));
       const imageGlyphs = await recognizePage(index, myToken, (pct, label) => {
@@ -653,10 +802,12 @@
       });
       if (imageGlyphs == null || myToken !== token) return null;
       imageAll.push(...imageGlyphs.map((item) => ({ ...item, y: item.y - dy })));
+      imageLines.push(...(ocrLines.get(index) || []));
     }
     return {
       file: which === 'region' ? filterGlyphs(fileAll, region) : fileAll,
       image: which === 'region' ? filterGlyphs(imageAll, region) : imageAll,
+      imageLines,
     };
   };
   const finishView = async (which, myToken, force) => {
@@ -665,18 +816,21 @@
       const found = await gather(which, myToken);
       if (!found || myToken !== token) return;
       const merged = reconcileGlyphs(found.file, found.image);
+      lastMerged = merged;
       renderCompare(found.file, found.image);
       setProgress(false, 100, '');
       const label = which === 'file' ? 'весь файл' : which === 'region' ? 'обведённый кусок' : 'эта страница';
       if (!merged.length) {
         setDraft('', force);
+        if (viewMode === 'table') paintTable();
         setStatus('Ни в файле, ни на картинке букв не нашлось.');
         return;
       }
       const before = userEdited;
-      setDraft(glyphsToPlainText(merged), force);
+      setDraft(slideText(found.file, found.image, found.imageLines), force);
+      if (viewMode === 'table') paintTable();
       if (!force && before) setStatus('Картинка готова. Поле не менял: ты уже правил текст.');
-      else setStatus(`В поле — ${label}. Слева буквы из файла, справа с картинки. Можно править.`);
+      else setStatus(`Показываю: ${label}. Вид можно сменить: «Как на странице» или «Таблица».`);
     } catch (err) {
       if (myToken !== token) return;
       setProgress(false, 0, '');
@@ -696,7 +850,8 @@
   };
 
   const copyDraft = async () => {
-    const text = draft.value;
+    const tableText = smartTableRows(lastMerged).map((row) => row.join('\t')).join('\n');
+    const text = viewMode === 'table' && tableText.trim() ? tableText : draft.value;
     if (!text.trim()) {
       setStatus('В поле пока пусто.');
       return;
@@ -721,6 +876,57 @@
     }
     if (!window.__CH_Studio?.mount) throw new Error('Редактор не загрузился');
     return window.__CH_Studio;
+  };
+  let excelBusy = false;
+  const downloadExcel = async () => {
+    if (excelBusy) return;
+    const rows = smartTableRows(lastMerged);
+    if (!rows.length) {
+      setStatus('Сначала выбери, что показать сверху.');
+      return;
+    }
+    excelBusy = true;
+    try {
+      let studio = null;
+      try {
+        studio = await ensureStudio();
+      } catch {
+        studio = null;
+      }
+      if (studio?.downloadXlsx) {
+        try {
+          const ok = await studio.downloadXlsx(rows, toolsBase);
+          if (ok) {
+            setStatus('Excel скачан.');
+            return;
+          }
+        } catch {
+          /* запасной файл ниже */
+        }
+      }
+      const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const html =
+        '<html><head><meta charset="utf-8"></head><body><table border="1">' +
+        rows.map((row) => '<tr>' + row.map((cell) => `<td>${esc(cell)}</td>`).join('') + '</tr>').join('') +
+        '</table></body></html>';
+      if (typeof URL.createObjectURL !== 'function') {
+        setStatus('Не удалось скачать Excel.');
+        return;
+      }
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' }));
+      a.href = url;
+      a.download = 'export_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xls';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+      setStatus('Скачан запасной файл .xls.');
+    } catch {
+      setStatus('Не удалось скачать Excel.');
+    } finally {
+      excelBusy = false;
+    }
   };
 
   const closeTable = () => {
@@ -767,8 +973,10 @@
       setStatus('Ни в файле, ни на картинке букв не нашлось.');
       return;
     }
+    lastMerged = merged;
     setDraft(glyphsToPlainText(merged), true);
-    await openTableRows(glyphsToGrid(merged));
+    setView('table');
+    await openTableRows(smartTableRows(merged));
     setStatus('Таблица открыта. Закрывается кнопкой «Закрыть таблицу» или клавишей Esc.');
   };
 
@@ -776,10 +984,8 @@
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
     setStatus('Читаю PDF…');
-    // #region agent log
-    fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'pre-fix',hypothesisId:'H3',location:'pdf-to-text.js:onchange',message:'new file opened',data:{cacheSize:ocrByPage.size,pageCountBefore:pageCount},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     ocrByPage.clear();
+    ocrLines.clear();
     token += 1;
     try {
       const pdfjs = await loadPdfJs();
@@ -842,7 +1048,8 @@
       region = { x1: a[0], y1: a[1], x2: b[0], y2: b[1] };
       rubberBox = box;
       paintRubber(box);
-      setStatus('Область отмечена. Складываю буквы из файла и с картинки.');
+      setStatus('Область отмечена. Показываю только её.');
+      if (typeof markSource === 'function') markSource('region');
       void fillField('region');
     };
     document.addEventListener('mousemove', move);
@@ -864,39 +1071,56 @@
     return button;
   };
 
-  bar.append(
-    tip('←', B, 'Предыдущая страница.', () => go(-1)),
-    tip('→', B, 'Следующая страница.', () => go(1)),
-    tip(
-      'Страница → поле',
-      B + ';background:#0b5cad',
-      'Сложить в поле эту страницу: буквы из файла и то, что распознано на картинке. Справа видно оба варианта.',
-      () => void fillField('page'),
-    ),
-    tip(
-      'Область → поле',
-      B + ';background:#0b5cad',
-      'Сложить в поле только обведённый кусок: файл и картинка. Сначала протяни рамку.',
-      () => void fillField('region'),
-    ),
-    tip(
-      'Весь файл → поле',
-      B + ';background:#0b5cad',
-      'Собрать все страницы: на каждой буквы из файла плюс распознанная картинка.',
-      () => void fillField('file'),
-    ),
-    tip('Страница → таблица', B + ';background:#1a7f37', 'Открыть эту страницу таблицей: слова и числа стоят рядом, как на листе.', () => void openTable('page')),
-    tip('Область → таблица', B + ';background:#1a7f37', 'Открыть обведённый кусок таблицей.', () => void openTable('region')),
-    tip('Весь файл → таблица', B + ';background:#1a7f37', 'Открыть все страницы одной таблицей.', () => void openTable('file')),
-    el('button', B, 'Закрыть', () => {
-      closeTable();
-      modal.style.display = 'none';
-      panel.style.display = 'flex';
-    }),
+  const sourceBtns = {};
+  const markSource = (which) => {
+    Object.keys(sourceBtns).forEach((key) => {
+      sourceBtns[key].style.background = key === which ? '#0b5cad' : '#333';
+    });
+  };
+  const showSource = (which) => {
+    markSource(which);
+    void fillField(which);
+  };
+  sourceBtns.page = tip(
+    'Эта страница',
+    B + ';background:#0b5cad',
+    'Показать в окне справа эту страницу. Вид — текст как на странице или таблица, переключатель там же.',
+    () => showSource('page'),
   );
-  side.insertBefore(
-    tip('Скопировать', B + ';background:#0b5cad', 'Скопировать то, что сейчас в поле, включая твои правки.', () => void copyDraft()),
-    draft,
+  sourceBtns.region = tip(
+    'Обведённый кусок',
+    B,
+    'Показать в окне только обведённую рамку. Сначала протяни рамку по странице.',
+    () => showSource('region'),
+  );
+  sourceBtns.file = tip(
+    'Весь файл',
+    B,
+    'Показать в окне все страницы подряд, сверху вниз.',
+    () => showSource('file'),
+  );
+  const prevBtn = tip('←', B, 'Предыдущая страница.', () => go(-1));
+  const nextBtn = tip('→', B, 'Следующая страница.', () => go(1));
+  prevBtn.setAttribute('aria-label', 'Предыдущая страница');
+  nextBtn.setAttribute('aria-label', 'Следующая страница');
+  const showLabel = el('div', 'font-size:12px;color:#9aa0a6;margin-right:2px', 'Показать:');
+  bar.append(
+    prevBtn,
+    nextBtn,
+    showLabel,
+    sourceBtns.page,
+    sourceBtns.region,
+    sourceBtns.file,
+  );
+  const fold = tip('Свернуть окно', B + ';margin-left:auto', 'Спрятать окно. Файл останется, его можно открыть снова.', () => {
+    closeTable();
+    modal.style.display = 'none';
+    panel.style.display = 'flex';
+  });
+  bar.append(fold);
+  switchRow.append(
+    tip('Скопировать', B + ';background:#0b5cad', 'Скопировать то, что сейчас видно: текст как на странице или таблицу.', () => void copyDraft()),
+    tip('Скачать Excel', B + ';background:#1a7f37', 'Скачать таблицу файлом Excel. Окно не меняется.', () => void downloadExcel()),
   );
 
   panel.append(
@@ -908,7 +1132,11 @@
       'font-size:11px;color:#9aa0a6;line-height:1.35',
       'Файл остаётся в браузере. Буквы из файла и с картинки складываются в одно поле. Первый раз распознаватель сохраняется в браузере, проценты показывают, что это не зависло.',
     ),
-    el('button', B + ';background:#a00', '✕', () => window.__pdf.destroy()),
+    (() => {
+      const closeTool = el('button', B + ';background:#a00', 'Закрыть инструмент', () => window.__pdf.destroy());
+      closeTool.title = 'Убрать инструмент. Файл придётся выбрать снова.';
+      return closeTool;
+    })(),
   );
   root.appendChild(panel);
 
@@ -923,6 +1151,18 @@
       root.remove();
       delete window.__pdf;
     },
-    _test: { filterGlyphs, glyphsToPlainText, glyphsToGrid, reconcileGlyphs, alignLines, openTableRows },
+    _test: {
+      filterGlyphs,
+      glyphsToPlainText,
+      glyphsToGrid,
+      reconcileGlyphs,
+      alignLines,
+      smartTableRows,
+      wordsToGlyphs,
+      openTableRows,
+      setMerged: (glyphs) => {
+        lastMerged = glyphs || [];
+      },
+    },
   };
 })();

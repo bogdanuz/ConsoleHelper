@@ -18,6 +18,14 @@ describe('onboarding wizard mechanics', () => {
       true,
     );
     expect(ONBOARDING_STEPS.at(-1)!.cta).toBe('finish');
+    expect(ONBOARDING_STEPS[0]!.how.join(' ')).toMatch(/пять коротких шагов/);
+    expect(ONBOARDING_STEPS[0]!.lead + ONBOARDING_STEPS[0]!.how.join(' ')).not.toMatch(/Alt\+Shift\+H/);
+    const open = ONBOARDING_STEPS.find((step) => step.id === 'open')!;
+    expect(open.how.join(' ')).toMatch(/Alt\+Shift\+H/);
+    const bookmark = ONBOARDING_STEPS.find((step) => step.id === 'bookmark')!;
+    expect(bookmark.how.join(' ')).toMatch(/Mac/);
+    const use = ONBOARDING_STEPS.find((step) => step.id === 'use')!;
+    expect(use.how.join(' ')).toMatch(/как на странице/);
   });
 
   it('advances and clamps step index', () => {

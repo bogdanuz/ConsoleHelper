@@ -333,6 +333,12 @@ button.ok {
   font-weight: 500;
 }
 
+.onboard-error {
+  margin: 0 0 12px;
+  color: #e6c07b;
+  font-weight: 500;
+}
+
 .onboard-actions {
   display: flex;
   flex-wrap: wrap;

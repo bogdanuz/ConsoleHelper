@@ -73,9 +73,6 @@ export function reconcileGlyphs(fileGlyphs: PdfGlyph[], imageGlyphs: PdfGlyph[])
     }
     extra.push(word);
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7598/ingest/4014ccc8-bfd9-4c38-8e8e-eed0edada4f3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'118115'},body:JSON.stringify({sessionId:'118115',runId:'pre-fix',hypothesisId:'H1',location:'pdfReconcile.ts:reconcileGlyphs',message:'reconcile counts',data:{fileCount:file.length,imageCount:image.length,extraCount:extra.length,dropped:image.length-extra.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return [...file.filter((_, index) => !dropFile.has(index)), ...extra];
 }
 

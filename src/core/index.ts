@@ -12,4 +12,5 @@ export * from './pairLabelValues';
 export * from './captureModes';
 export * from './pdfText';
 export * from './pdfReconcile';
+export * from './pdfView';
 export * from './pinnedDelta';
