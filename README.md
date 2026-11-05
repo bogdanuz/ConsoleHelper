@@ -1,6 +1,6 @@
 # ConsoleHelper
 
-**Версия 0.14.1** · [MIT](LICENSE)
+**Версия 0.14.2** · [MIT](LICENSE)
 
 Сайт: https://bogdanuz.github.io/ConsoleHelper/
 

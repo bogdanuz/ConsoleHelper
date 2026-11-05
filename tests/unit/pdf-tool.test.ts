@@ -24,7 +24,7 @@ describe('pdf tool', () => {
     expect(code).toContain('textarea');
     expect(code).not.toContain('text-to-table.js');
     (0, eval)(code);
-    const api = (window as unknown as { __pdf: { _test: { filterGlyphs: typeof filterGlyphs; glyphsToPlainText: typeof glyphsToPlainText; glyphsToGrid: typeof glyphsToGrid }; destroy: () => void } }).__pdf;
+    const api = (window as unknown as { __pdf: { _test: { filterGlyphs: typeof filterGlyphs; glyphsToPlainText: typeof glyphsToPlainText; glyphsToGrid: typeof glyphsToGrid; reconcileGlyphs: typeof reconcileGlyphs; alignLines: typeof alignLines }; destroy: () => void } }).__pdf;
     const items = [
       { text: 'A', x: 0, y: 20, w: 10, h: 8 },
       { text: 'B', x: 40, y: 20, w: 10, h: 8 },
@@ -107,7 +107,7 @@ describe('pdf tool', () => {
   it('reads a second PDF instead of the picture from the first one', async () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
-    HTMLCanvasElement.prototype.getContext = (() => ({})) as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const fetched: string[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -183,7 +183,7 @@ describe('pdf tool', () => {
   it('keeps the page you returned to when an older page finishes later', async () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
-    HTMLCanvasElement.prototype.getContext = (() => ({})) as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const waiting: Record<number, Array<() => void>> = { 1: [], 2: [] };
     (window as unknown as { pdfjsLib: unknown }).pdfjsLib = {
       getDocument: () => ({
@@ -240,7 +240,7 @@ describe('pdf tool', () => {
   it('does not keep the previous file picture if recognition finishes during the next open', async () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
-    HTMLCanvasElement.prototype.getContext = (() => ({})) as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -300,7 +300,9 @@ describe('pdf tool', () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     pending.shift()?.();
-    releaseSecond?.();
+    const openSecond = releaseSecond as (() => void) | null;
+    if (!openSecond) throw new Error('second file did not reach open');
+    openSecond();
     await Promise.all([firstOpen, secondOpen]);
     const startedSecond = Date.now();
     while (!pending.length) {
@@ -325,7 +327,7 @@ describe('pdf tool', () => {
   it('does not paste the previous page letters while the next page is still opening', async () => {
     const code = readFileSync(join(root, 'public/tools/pdf-to-text.js'), 'utf8');
     (0, eval)(code);
-    HTMLCanvasElement.prototype.getContext = (() => ({})) as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
