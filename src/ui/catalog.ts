@@ -63,6 +63,15 @@ export const CATALOG_TOOLS: ToolMeta[] = [
     when: 'Данные карточками (каталог, лента), а нужен Excel.',
   },
   {
+    id: 'pdf-to-text',
+    name: 'PDF → текст',
+    file: 'tools/pdf-to-text.js',
+    tag: 'файл',
+    desc: 'Текст из PDF-файла',
+    what: 'Открывает PDF по страницам. Можно взять страницу, область или весь файл: скопировать текст или открыть таблицу.',
+    when: 'Текст лежит в PDF, а не на обычной странице сайта.',
+  },
+  {
     id: 'screenshot',
     name: 'Скриншот',
     file: 'tools/screenshot.js',

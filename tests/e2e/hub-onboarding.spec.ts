@@ -33,7 +33,7 @@ test.describe('hub onboarding', () => {
     await expect(page.getByRole('heading', { name: 'Что умеет меню' })).toBeVisible();
     await expect(page.getByText('Что делает').first()).toBeVisible();
     await expect(page.getByText('Когда брать').first()).toBeVisible();
-    await expect(page.locator('.card-title')).toHaveCount(4);
+    await expect(page.locator('.card-title')).toHaveCount(5);
     await expect(page.locator('.card-title').first()).toContainText(/таблица/i);
   });
 });

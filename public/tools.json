@@ -32,6 +32,14 @@
     "hint": "Когда данные карточками, как в каталоге"
   },
   {
+    "id": "pdf-to-text",
+    "name": "PDF → текст",
+    "file": "tools/pdf-to-text.js",
+    "tag": "файл",
+    "desc": "Текст из PDF-файла",
+    "hint": "Когда нужно забрать текст или кусок страницы из PDF"
+  },
+  {
     "id": "screenshot",
     "name": "Скриншот",
     "file": "tools/screenshot.js",

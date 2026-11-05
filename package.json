@@ -1,6 +1,6 @@
 {
   "name": "console-helper",
-  "version": "0.12.2",
+  "version": "0.13.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -14,13 +14,15 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify": "npm run build:fat && npm test && npm run build && npm run test:e2e",
-    "vendor:xlsx": "node scripts/copy-xlsx-vendor.mjs"
+    "vendor:xlsx": "node scripts/copy-xlsx-vendor.mjs",
+    "vendor:pdf": "node scripts/copy-pdf-vendor.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/node": "^26.6.6",
     "html2canvas": "^1.4.1",
     "jsdom": "^26.1.0",
+    "pdfjs-dist": "^3.11.174",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.1.4",

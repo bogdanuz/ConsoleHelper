@@ -18,6 +18,8 @@ describe('fat bookmarklet', () => {
     const payload = Buffer.from(m![1]!, 'base64').toString('utf8');
     expect(payload).toContain('__CH_BUNDLE__');
     expect(payload).toContain('https://bogdanuz.github.io/ConsoleHelper/tools/');
+    expect(payload).toContain('pdf-to-text');
+    expect(payload).toContain('Сначала обведи область');
   });
 
   it('launcher supports __CH_BUNDLE__', () => {

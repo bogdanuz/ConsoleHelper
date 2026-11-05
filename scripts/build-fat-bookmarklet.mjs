@@ -17,6 +17,7 @@ const INCLUDE = new Set([
   'dom-tables.js',
   'table-studio.js',
   'cards-to-table.js',
+  'pdf-to-text.js',
 ]);
 
 const screenshotStub = `(() => {})();`;
@@ -26,16 +27,9 @@ function stripToolsPrefix(file) {
 }
 
 const sources = {};
-sources['table-studio.js'] = readFileSync(join(toolsDir, 'table-studio.js'), 'utf8');
-sources['text-to-table.js'] = readFileSync(join(toolsDir, 'text-to-table.js'), 'utf8');
-sources['dom-tables.js'] = readFileSync(join(toolsDir, 'dom-tables.js'), 'utf8');
-
-try {
-  sources['cards-to-table.js'] = readFileSync(join(toolsDir, 'cards-to-table.js'), 'utf8');
-} catch {
-  // Sprint 9 may add later; skip if missing at early build
+for (const name of INCLUDE) {
+  sources[name] = readFileSync(join(toolsDir, name), 'utf8');
 }
-
 sources['screenshot.js'] = screenshotStub;
 
 const tools = toolsJson
