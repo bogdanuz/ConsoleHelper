@@ -1,5 +1,5 @@
 (async () => {
-  const CH_VERSION = window.__CH_VERSION__ || '0.13.1';
+  const CH_VERSION = window.__CH_VERSION__ || '0.14.1';
   const HOTKEY_CODE = 'KeyH';
   const mode = window.__CH_MODE__ || 'open';
   window.__CH_MODE__ = undefined;
